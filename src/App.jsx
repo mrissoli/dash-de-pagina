@@ -199,18 +199,31 @@ function AdminPanel({ user }) {
 
   const showMsg = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg({ text: '', type: '' }), 4000); };
 
+  // Pega o token Supabase para autenticar no backend como admin
+  const getAuthHeader = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  }, []);
+
+  const adminFetch = useCallback(async (url, options = {}) => {
+    const authHeaders = await getAuthHeader();
+    return fetch(url, { ...options, headers: { ...authHeaders, ...(options.headers || {}) }, credentials: 'include' });
+  }, [getAuthHeader]);
+
   const loadClientes = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/clientes`, { credentials: 'include' });
+    const res = await adminFetch(`${API_BASE}/admin/clientes`);
     const d = await res.json();
     if (d.success) setClientes(d.data);
-  }, []);
+    else showMsg(d.error || 'Erro ao carregar clientes', 'error');
+  }, [adminFetch]);
 
   const loadProjetos = useCallback(async (clienteId) => {
     const url = clienteId ? `${API_BASE}/admin/projetos?clienteId=${clienteId}` : `${API_BASE}/admin/projetos`;
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await adminFetch(url);
     const d = await res.json();
     if (d.success) setProjetos(d.data);
-  }, []);
+  }, [adminFetch]);
 
   useEffect(() => { loadClientes(); loadProjetos(null); }, []);
 
@@ -226,7 +239,7 @@ function AdminPanel({ user }) {
   const handleCreateCliente = async () => {
     if (!clienteForm.nome || !clienteForm.email || !clienteForm.senha) return showMsg('Preencha nome, e-mail e senha.', 'error');
     setSaving(true);
-    const res = await fetch(`${API_BASE}/admin/clientes`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clienteForm) });
+    const res = await adminFetch(`${API_BASE}/admin/clientes`, { method: 'POST', body: JSON.stringify(clienteForm) });
     const d = await res.json();
     if (d.success) {
       showMsg(`✅ Cliente "${d.nome}" criado com sucesso!`);
@@ -239,7 +252,7 @@ function AdminPanel({ user }) {
 
   const handleDeleteCliente = async (c) => {
     if (!window.confirm(`Excluir o cliente "${c.nome}" e todos os projetos dele?`)) return;
-    const res = await fetch(`${API_BASE}/admin/clientes/${c.user_id}`, { method: 'DELETE', credentials: 'include' });
+    const res = await adminFetch(`${API_BASE}/admin/clientes/${c.user_id}`, { method: 'DELETE' });
     const d = await res.json();
     if (d.success) { showMsg('✅ Cliente excluído.'); loadClientes(); if (selectedCliente?.user_id === c.user_id) setSelectedCliente(null); }
     else showMsg(d.error, 'error');
@@ -262,7 +275,7 @@ function AdminPanel({ user }) {
     setSaving(true);
     const url = editingProjeto ? `${API_BASE}/admin/projetos/${editingProjeto.id}` : `${API_BASE}/admin/projetos`;
     const method = editingProjeto ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(projetoForm) });
+    const res = await adminFetch(url, { method, body: JSON.stringify(projetoForm) });
     const d = await res.json();
     if (d.success) { showMsg('✅ Projeto salvo!'); setShowProjetoForm(false); loadProjetos(selectedCliente?.user_id || null); }
     else showMsg(d.error, 'error');
@@ -271,7 +284,7 @@ function AdminPanel({ user }) {
 
   const handleDeleteProjeto = async (id) => {
     if (!window.confirm('Excluir este projeto?')) return;
-    await fetch(`${API_BASE}/admin/projetos/${id}`, { method: 'DELETE', credentials: 'include' });
+    await adminFetch(`${API_BASE}/admin/projetos/${id}`, { method: 'DELETE' });
     loadProjetos(selectedCliente?.user_id || null);
   };
 

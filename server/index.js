@@ -155,21 +155,28 @@ app.get('/api/realtime', async (req, res) => {
 });
 
 // ============================================
-// Middleware: Verifica se é Admin
+// Middleware: Verifica se é Admin (via Supabase Bearer Token)
 // ============================================
 const ADMIN_USER_ID = 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc';
-const requireAdmin = (req, res, next) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Acesso negado.' });
+const requireAdmin = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Acesso negado.' });
+    }
+    const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.id !== ADMIN_USER_ID) {
+        // Valida o token diretamente com o Supabase (usa o mesmo JWT do login do frontend)
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+            return res.status(401).json({ error: 'Token inválido ou expirado.' });
+        }
+        if (user.id !== ADMIN_USER_ID) {
             return res.status(403).json({ error: 'Acesso restrito ao administrador.' });
         }
-        req.user = decoded;
+        req.user = { id: user.id, email: user.email };
         next();
-    } catch {
-        res.status(401).json({ error: 'Token inválido.' });
+    } catch (err) {
+        res.status(401).json({ error: 'Erro ao validar token.' });
     }
 };
 

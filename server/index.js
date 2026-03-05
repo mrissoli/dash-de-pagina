@@ -26,7 +26,14 @@ const supabase = createClient(
 );
 
 // GA4 Client
-const analyticsDataClient = new BetaAnalyticsDataClient();
+let analyticsDataClient;
+if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    analyticsDataClient = new BetaAnalyticsDataClient({
+        credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)
+    });
+} else {
+    analyticsDataClient = new BetaAnalyticsDataClient();
+}
 
 // ============================================
 // MIDDLEWARE: Verifica Autenticação e injeta perfil "PropertyID"

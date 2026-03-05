@@ -1,7 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Tenta usar variáveis de build (dev local) ou runtime config (produção)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || window.__RUNTIME_CONFIG__?.SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || window.__RUNTIME_CONFIG__?.SUPABASE_ANON_KEY;
+// Em dev local: usa VITE_ env vars
+// Em produção (Easypanel): usa window.__RUNTIME_CONFIG__ injetado pelo Express
+function getConfig() {
+    const rc = window.__RUNTIME_CONFIG__ || {};
+    return {
+        url: import.meta.env.VITE_SUPABASE_URL || rc.SUPABASE_URL || '',
+        key: import.meta.env.VITE_SUPABASE_ANON_KEY || rc.SUPABASE_ANON_KEY || ''
+    };
+}
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+const { url, key } = getConfig();
+
+// Cria um client dummy se não tem config (evita crash na inicialização)
+export const supabase = (url && key)
+    ? createClient(url, key)
+    : null;
+
+// Helper para verificar se o Supabase está configurado
+export const isSupabaseReady = () => supabase !== null;

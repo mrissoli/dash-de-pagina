@@ -8,13 +8,8 @@ RUN npm install
 
 COPY . .
 
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-# Em produção, a API roda no mesmo servidor (sem URL separada)
+# Build sem variáveis VITE_ — usaremos runtime config
 ENV VITE_API_BASE=/api
-
 RUN npm run build
 
 # ===== Etapa 2: Backend Node.js + Frontend Estático =====

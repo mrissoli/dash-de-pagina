@@ -8,9 +8,9 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, Cell, PieChart, Pie
 } from 'recharts';
-import { supabase } from './lib/supabase';
+import { supabase, isSupabaseReady } from './lib/supabase';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 // --- MOCK CONSTANTS (Deletados pois a UI usará state nativo via API) ---
 // ... Constants omitidos untuk clareza, fontes e topPages continuam os demais.
@@ -80,6 +80,11 @@ function LoginScreen({ onLogin }) {
 
     try {
       // Usando Supabase direto no frontend conf. pedido do cliente
+      if (!isSupabaseReady()) {
+        setErrorMsg('Erro de configuração: Supabase não está configurado. Verifique as variáveis de ambiente.');
+        setIsLoading(false);
+        return;
+      }
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,

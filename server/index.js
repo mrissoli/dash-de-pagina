@@ -134,6 +134,155 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ============================================
+// Endpoint: Usuários em Tempo Real (GA4 Realtime)
+// ============================================
+app.get('/api/realtime', async (req, res) => {
+    try {
+        const propertyId = req.query.propertyId;
+        if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const [response] = await analyticsDataClient.runRealtimeReport({
+            property: `properties/${propertyId}`,
+            metrics: [{ name: 'activeUsers' }],
+        });
+
+        const activeUsers = response.rows?.[0]?.metricValues?.[0]?.value || '0';
+        res.json({ success: true, activeUsers: parseInt(activeUsers, 10) });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Middleware: Verifica se é Admin
+// ============================================
+const ADMIN_USER_ID = 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc';
+const requireAdmin = (req, res, next) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Acesso negado.' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.id !== ADMIN_USER_ID) {
+            return res.status(403).json({ error: 'Acesso restrito ao administrador.' });
+        }
+        req.user = decoded;
+        next();
+    } catch {
+        res.status(401).json({ error: 'Token inválido.' });
+    }
+};
+
+// ============================================
+// ADMIN: Listar todos os clientes
+// ============================================
+app.get('/api/admin/clientes', requireAdmin, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('clientes_dashboard')
+            .select('user_id, nome, email')
+            .order('nome');
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Listar projetos de um cliente
+// ============================================
+app.get('/api/admin/projetos', requireAdmin, async (req, res) => {
+    try {
+        const { clienteId } = req.query;
+        let query = supabase
+            .from('projetos')
+            .select('id, nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo')
+            .order('nome');
+        if (clienteId) query = query.eq('cliente_id', clienteId);
+
+        const { data, error } = await query;
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Criar projeto
+// ============================================
+app.post('/api/admin/projetos', requireAdmin, async (req, res) => {
+    try {
+        const { nome, google_property_id, clarity_project_id, clarity_token, cliente_id } = req.body;
+        if (!nome || !google_property_id || !cliente_id) {
+            return res.status(400).json({ success: false, error: 'Campos obrigatórios: nome, google_property_id, cliente_id' });
+        }
+        const { data, error } = await supabase
+            .from('projetos')
+            .insert([{ nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo: true }])
+            .select()
+            .single();
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Atualizar projeto
+// ============================================
+app.put('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, google_property_id, clarity_project_id, clarity_token, ativo } = req.body;
+        const { data, error } = await supabase
+            .from('projetos')
+            .update({ nome, google_property_id, clarity_project_id, clarity_token, ativo })
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Deletar projeto
+// ============================================
+app.delete('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase.from('projetos').delete().eq('id', id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// CLIENTE: Listar seus próprios projetos
+// ============================================
+app.get('/api/meus-projetos', requireAuth, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('projetos')
+            .select('id, nome, google_property_id, clarity_project_id, clarity_token')
+            .eq('cliente_id', req.user.id)
+            .eq('ativo', true)
+            .order('nome');
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
 // Endpoint: Resumo de Métricas Principais
 // ============================================
 app.get('/api/metrics', async (req, res) => {

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BarChart3, Users, Clock, MousePointerClick, Activity, ChevronDown, Calendar,
   LayoutDashboard, Settings, Bell, ArrowUpRight, ArrowDownRight,
-  MonitorPlay, Flame, Mail, Lock, LogIn, Shield, Smartphone, Monitor, Tablet
+  MonitorPlay, Flame, Mail, Lock, LogIn, Shield, Smartphone, Monitor, Tablet,
+  FolderOpen, Plus, Pencil, Trash2, Check, X, ChevronRight, ShieldCheck
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,6 +12,7 @@ import {
 import { supabase, isSupabaseReady } from './lib/supabase';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const ADMIN_USER_ID = 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc';
 
 // --- MOCK CONSTANTS (Deletados pois a UI usará state nativo via API) ---
 // ... Constants omitidos untuk clareza, fontes e topPages continuam os demais.
@@ -161,13 +163,178 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+// ============================================================
+// Admin Panel Component
+// ============================================================
+function AdminPanel({ user }) {
+  const [clientes, setClientes] = useState([]);
+  const [projetos, setProjetos] = useState([]);
+  const [selectedCliente, setSelectedCliente] = useState(null);
+  const [editingProjeto, setEditingProjeto] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: '' });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const loadClientes = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/clientes`, { credentials: 'include' });
+    const d = await res.json();
+    if (d.success) setClientes(d.data);
+  }, []);
+
+  const loadProjetos = useCallback(async (clienteId) => {
+    const url = clienteId ? `${API_BASE}/admin/projetos?clienteId=${clienteId}` : `${API_BASE}/admin/projetos`;
+    const res = await fetch(url, { credentials: 'include' });
+    const d = await res.json();
+    if (d.success) setProjetos(d.data);
+  }, []);
+
+  useEffect(() => { loadClientes(); loadProjetos(null); }, []);
+
+  const handleSelectCliente = (c) => {
+    setSelectedCliente(c);
+    loadProjetos(c.user_id);
+    setShowForm(false);
+    setEditingProjeto(null);
+  };
+
+  const openCreate = () => {
+    setEditingProjeto(null);
+    setFormData({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: selectedCliente?.user_id || '' });
+    setShowForm(true);
+  };
+
+  const openEdit = (p) => {
+    setEditingProjeto(p);
+    setFormData({ nome: p.nome, google_property_id: p.google_property_id, clarity_project_id: p.clarity_project_id || '', clarity_token: p.clarity_token || '', cliente_id: p.cliente_id });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true); setMsg('');
+    try {
+      const url = editingProjeto ? `${API_BASE}/admin/projetos/${editingProjeto.id}` : `${API_BASE}/admin/projetos`;
+      const method = editingProjeto ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+      const d = await res.json();
+      if (d.success) {
+        setMsg('✅ Salvo com sucesso!');
+        setShowForm(false);
+        loadProjetos(selectedCliente?.user_id || null);
+      } else { setMsg(`❌ Erro: ${d.error}`); }
+    } catch (e) { setMsg(`❌ Erro: ${e.message}`); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir este projeto?')) return;
+    await fetch(`${API_BASE}/admin/projetos/${id}`, { method: 'DELETE', credentials: 'include' });
+    loadProjetos(selectedCliente?.user_id || null);
+  };
+
+  const adSt = { background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '12px', padding: '20px' };
+  const inputSt = { width: '100%', padding: '10px 14px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '14px', boxSizing: 'border-box' };
+  const btnSt = (color) => ({ padding: '9px 20px', background: color, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' });
+
+  return (
+    <div style={{ padding: '32px 40px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
+        <ShieldCheck size={24} color="var(--accent-color)" />
+        <div>
+          <h2 style={{ margin: 0, fontSize: '22px' }}>Painel Administrativo</h2>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>Gerencie clientes e projetos de Analytics</p>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '20px', alignItems: 'start' }}>
+        {/* Lista de clientes */}
+        <div style={adSt}>
+          <div style={{ fontWeight: '700', marginBottom: '14px', fontSize: '13px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Clientes</div>
+          {clientes.map(c => (
+            <div key={c.user_id} onClick={() => handleSelectCliente(c)}
+              style={{ padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', marginBottom: '4px', background: selectedCliente?.user_id === c.user_id ? 'rgba(99,102,241,0.15)' : 'transparent', border: selectedCliente?.user_id === c.user_id ? '1px solid var(--accent-color)' : '1px solid transparent', transition: 'all 0.15s' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>{c.nome || 'Sem nome'}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.email || c.user_id?.slice(0, 16) + '...'}</div>
+            </div>
+          ))}
+          {clientes.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Nenhum cliente encontrado.</div>}
+        </div>
+
+        {/* Projetos do cliente selecionado */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ fontWeight: '700', fontSize: '15px' }}>
+              {selectedCliente ? `Projetos de ${selectedCliente.nome || 'Cliente'}` : 'Todos os Projetos'}
+              <span style={{ marginLeft: '10px', background: 'var(--accent-color)', color: '#fff', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{projetos.length}</span>
+            </div>
+            <button onClick={openCreate} style={btnSt('var(--accent-color)')}><Plus size={14} /> Novo Projeto</button>
+          </div>
+
+          {msg && <div style={{ padding: '10px 14px', borderRadius: '8px', background: msg.startsWith('✅') ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.startsWith('✅') ? 'var(--success-color)' : 'var(--danger-color)', marginBottom: '14px', fontSize: '13px' }}>{msg}</div>}
+
+          {showForm && (
+            <div style={{ ...adSt, marginBottom: '16px', border: '1px solid var(--accent-color)' }}>
+              <div style={{ fontWeight: '700', marginBottom: '16px' }}>{editingProjeto ? '✏️ Editar Projeto' : '➕ Novo Projeto'}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Nome do Projeto *</label><input style={inputSt} placeholder="Ex: Site Principal" value={formData.nome} onChange={e => setFormData({ ...formData, nome: e.target.value })} /></div>
+                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>GA4 Property ID *</label><input style={inputSt} placeholder="Ex: 504225943" value={formData.google_property_id} onChange={e => setFormData({ ...formData, google_property_id: e.target.value })} /></div>
+                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clarity Project ID</label><input style={inputSt} placeholder="Ex: abc123xyz" value={formData.clarity_project_id} onChange={e => setFormData({ ...formData, clarity_project_id: e.target.value })} /></div>
+                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clarity API Token</label><input style={inputSt} placeholder="Bearer token do Clarity" value={formData.clarity_token} onChange={e => setFormData({ ...formData, clarity_token: e.target.value })} /></div>
+                {!selectedCliente && <div style={{ gridColumn: '1/-1' }}><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Cliente ID (user_id)</label><input style={inputSt} placeholder="UUID do cliente" value={formData.cliente_id} onChange={e => setFormData({ ...formData, cliente_id: e.target.value })} /></div>}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button onClick={handleSave} disabled={saving} style={btnSt('#10b981')}><Check size={14} />{saving ? 'Salvando...' : 'Salvar'}</button>
+                <button onClick={() => { setShowForm(false); setMsg(''); }} style={{ ...btnSt('transparent'), border: '1px solid var(--surface-border)', color: 'var(--text-secondary)' }}><X size={14} /> Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {projetos.map(p => (
+              <div key={p.id} style={{ ...adSt, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FolderOpen size={18} color="var(--accent-color)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{p.nome}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <span>📊 GA4: <code style={{ color: 'var(--accent-color)' }}>{p.google_property_id}</code></span>
+                    {p.clarity_project_id && <span>🎯 Clarity: <code style={{ color: '#10b981' }}>{p.clarity_project_id}</code></span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  <button onClick={() => openEdit(p)} style={{ ...btnSt('rgba(99,102,241,0.2)'), color: 'var(--accent-color)', border: '1px solid rgba(99,102,241,0.3)' }}><Pencil size={13} /></button>
+                  <button onClick={() => handleDelete(p.id)} style={{ ...btnSt('rgba(239,68,68,0.15)'), color: 'var(--danger-color)', border: '1px solid rgba(239,68,68,0.3)' }}><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))}
+            {projetos.length === 0 && !showForm && <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--card-bg)', borderRadius: '12px', border: '1px dashed var(--surface-border)' }}>Nenhum projeto cadastrado. Clique em "Novo Projeto" para começar.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Dashboard Screen
+// ============================================================
 function DashboardScreen({ user, onLogout }) {
+  const isAdmin = user.id === ADMIN_USER_ID;
   const [activeNav, setActiveNav] = useState('dashboard');
   const [dateRange, setDateRange] = useState('7daysAgo');
   const [showDateMenu, setShowDateMenu] = useState(false);
+
+  // Multi-projeto
+  const [projetos, setProjetos] = useState([]);
+  const [selectedProjeto, setSelectedProjeto] = useState(null);
+  const [showProjetoMenu, setShowProjetoMenu] = useState(false);
+
+  // Métricas
   const [metrics, setMetrics] = useState({
     totalVisitsGA: '...', bounceRateGA: '...', activeUsersClarity: '...', avgTimeGA: '...', activeUsersGA: '...', newUsersGA: '...', pagesPerSessionGA: '...'
   });
+  const [realtimeUsers, setRealtimeUsers] = useState(null);
   const [trafficData, setTrafficData] = useState([]);
   const [sourcesData, setSourcesData] = useState([]);
   const [eventsData, setEventsData] = useState([]);
@@ -177,6 +344,7 @@ function DashboardScreen({ user, onLogout }) {
   const [topPagesData, setTopPagesData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState('');
+  const realtimeIntervalRef = useRef(null);
 
   const dateOptions = [
     { label: 'Últimos 7 dias', value: '7daysAgo' },
@@ -185,26 +353,65 @@ function DashboardScreen({ user, onLogout }) {
     { label: 'Últimos 90 dias', value: '90daysAgo' },
   ];
 
+  // Carrega lista de projetos do cliente
+  useEffect(() => {
+    const loadProjetos = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/meus-projetos`, { credentials: 'include' });
+        const d = await res.json();
+        if (d.success && d.data.length > 0) {
+          setProjetos(d.data);
+          setSelectedProjeto(d.data[0]);
+        } else {
+          // Fallback para o projeto da tabela clientes_dashboard legacy
+          if (user.ga4PropertyId) {
+            const legacyProjeto = { id: 'legacy', nome: 'Projeto Principal', google_property_id: user.ga4PropertyId, clarity_project_id: user.clarityProjectId, clarity_token: user.clarityToken };
+            setProjetos([legacyProjeto]);
+            setSelectedProjeto(legacyProjeto);
+          }
+        }
+      } catch { }
+    };
+    loadProjetos();
+  }, [user]);
+
+  // Polling de usuários em tempo real (a cada 30s)
+  const fetchRealtime = useCallback(async (propertyId) => {
+    if (!propertyId) return;
+    try {
+      const res = await fetch(`${API_BASE}/realtime?propertyId=${propertyId}`);
+      const d = await res.json();
+      if (d.success) setRealtimeUsers(d.activeUsers);
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProjeto?.google_property_id) return;
+    fetchRealtime(selectedProjeto.google_property_id);
+    realtimeIntervalRef.current = setInterval(() => fetchRealtime(selectedProjeto.google_property_id), 30000);
+    return () => clearInterval(realtimeIntervalRef.current);
+  }, [selectedProjeto, fetchRealtime]);
+
   // Buscar dados reais das APIs passando o ID diretamente como parametro GET exposto
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.ga4PropertyId) return;
+      if (!selectedProjeto?.google_property_id) return;
       try {
         setIsLoading(true);
         setDashboardError('');
         // Usamos Promise.all para disparar consultas simultâneas tornando o carregamento rápido
         const dr = `&dateRange=${dateRange}`;
-        const pid = `propertyId=${user.ga4PropertyId}`;
-        const ct = `&clarityToken=${encodeURIComponent(user.clarityToken || '')}`;
+        const pid = `propertyId=${selectedProjeto.google_property_id}`;
+        const ct = `&clarityToken=${encodeURIComponent(selectedProjeto.clarity_token || '')}`;
         const [resMetrics, resTraffic, resSources, resEvents, resDevices, resBrowsers, resCountries, resTopPages] = await Promise.all([
-          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}`),
-          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}`),
-          fetch(`${API_BASE}/sources?${pid}${dr}`),
-          fetch(`${API_BASE}/events?${pid}${dr}`),
-          fetch(`${API_BASE}/devices?${pid}${dr}`),
-          fetch(`${API_BASE}/browsers?${pid}${dr}`),
-          fetch(`${API_BASE}/countries?${pid}${dr}`),
-          fetch(`${API_BASE}/top-pages?${pid}${dr}`)
+          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/sources?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/events?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/devices?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/browsers?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/countries?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/top-pages?${pid}${dr}`, { credentials: 'include' })
         ]);
 
         if (resMetrics.ok) {
@@ -278,7 +485,7 @@ function DashboardScreen({ user, onLogout }) {
     };
 
     fetchData();
-  }, [user, dateRange]);
+  }, [selectedProjeto, dateRange]);
 
   return (
     <>
@@ -289,6 +496,12 @@ function DashboardScreen({ user, onLogout }) {
           <div className={`nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveNav('dashboard')}><LayoutDashboard size={18} /> Resumo</div>
           <div className={`nav-item ${activeNav === 'analytics' ? 'active' : ''}`} onClick={() => setActiveNav('analytics')}><BarChart3 size={18} /> Analytics Base</div>
           <div className={`nav-item ${activeNav === 'clarity' ? 'active' : ''}`} onClick={() => setActiveNav('clarity')}><MonitorPlay size={18} /> Mapas de Calor</div>
+          {isAdmin && (
+            <>
+              <div className="nav-section-title" style={{ marginTop: '16px' }}>Administração</div>
+              <div className={`nav-item ${activeNav === 'admin' ? 'active' : ''}`} onClick={() => setActiveNav('admin')} style={{ color: 'var(--accent-color)' }}><ShieldCheck size={18} /> Gerenciar Clientes</div>
+            </>
+          )}
         </div>
         <div style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px solid var(--surface-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -301,14 +514,34 @@ function DashboardScreen({ user, onLogout }) {
           <button onClick={onLogout} style={{ marginTop: '16px', width: '100%', padding: '8px', background: 'transparent', border: '1px solid var(--surface-border)', color: 'var(--text-secondary)', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>Sair da Conta</button>
         </div>
       </aside>
+      {activeNav === 'admin' && isAdmin && <main className="main-content"><AdminPanel user={user} /></main>}
 
-      <main className="main-content">
+      {activeNav !== 'admin' && <main className="main-content">
         <header className="header">
           <div className="header-title">
-            <h1>Visão Geral da Conta</h1>
+            <h1>{selectedProjeto?.nome || 'Visão Geral da Conta'}</h1>
             <p>Dados combinados de forma segura pelo Servidor</p>
           </div>
           <div className="header-actions">
+            {/* Seletor de Projeto */}
+            {projetos.length > 1 && (
+              <div className="date-picker" onClick={() => setShowProjetoMenu(!showProjetoMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px' }}>
+                <FolderOpen size={16} color="var(--text-secondary)" />
+                <span>{selectedProjeto?.nome || 'Projeto'}</span>
+                <ChevronDown size={16} color="var(--text-secondary)" />
+                {showProjetoMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '220px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                    {projetos.map(p => (
+                      <div key={p.id} onClick={(e) => { e.stopPropagation(); setSelectedProjeto(p); setShowProjetoMenu(false); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: selectedProjeto?.id === p.id ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: selectedProjeto?.id === p.id ? '600' : '400', background: selectedProjeto?.id === p.id ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'all 0.15s' }}>
+                        {p.nome}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Seletor de Período */}
             <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
               <Calendar size={16} color="var(--text-secondary)" />
               <span>{dateOptions.find(o => o.value === dateRange)?.label}</span>
@@ -316,11 +549,8 @@ function DashboardScreen({ user, onLogout }) {
               {showDateMenu && (
                 <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '180px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
                   {dateOptions.map(opt => (
-                    <div
-                      key={opt.value}
-                      onClick={(e) => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
-                      style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? '600' : '400', background: dateRange === opt.value ? 'rgba(99, 102, 241, 0.1)' : 'transparent', transition: 'all 0.15s' }}
-                    >
+                    <div key={opt.value} onClick={(e) => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
+                      style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? '600' : '400', background: dateRange === opt.value ? 'rgba(99, 102, 241, 0.1)' : 'transparent', transition: 'all 0.15s' }}>
                       {opt.label}
                     </div>
                   ))}
@@ -339,7 +569,7 @@ function DashboardScreen({ user, onLogout }) {
 
         <div className="dashboard">
           <div className="metrics-grid">
-            <MetricCard title="Usuários Ativos (GA)" value={metrics.activeUsersGA} icon={Activity} colorClass="icon-green" isLive={true} />
+            <MetricCard title="Usuários Ao Vivo" value={realtimeUsers !== null ? realtimeUsers : '...'} icon={Activity} colorClass="icon-green" isLive={true} />
             <MetricCard title="Total de Sessões (GA)" value={metrics.totalVisitsGA} change="-" trend="up" icon={Users} colorClass="icon-blue" />
             <MetricCard title="Taxa de Rejeição (GA)" value={metrics.bounceRateGA} change="-" trend="down" icon={MousePointerClick} colorClass="icon-orange" />
             <MetricCard title="Tempo Médio (GA)" value={metrics.avgTimeGA || '00:00'} change="-" trend="up" icon={Clock} colorClass="icon-purple" />
@@ -561,7 +791,7 @@ function DashboardScreen({ user, onLogout }) {
           </div>
 
         </div>
-      </main>
+      </main>}
     </>
   );
 }

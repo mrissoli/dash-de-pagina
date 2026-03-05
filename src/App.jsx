@@ -573,6 +573,7 @@ export default function App() {
   useEffect(() => {
     const checkSession = async () => {
       try {
+        if (!isSupabaseReady()) throw new Error("Supabase is not configured.");
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
           const { data: clientData } = await supabase
@@ -603,7 +604,9 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isSupabaseReady()) {
+        await supabase.auth.signOut();
+      }
     } catch (err) { }
     setCurrentUser(null);
   };

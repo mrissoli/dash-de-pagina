@@ -5,6 +5,7 @@ CREATE TABLE clientes_dashboard (
   email TEXT NOT NULL,
   google_property_id TEXT,
   clarity_project_id TEXT,
+  clarity_token TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

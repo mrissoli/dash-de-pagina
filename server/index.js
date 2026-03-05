@@ -16,7 +16,7 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 80;
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta-muito-segura';
 
 // Supabase (Usado APENAS no backend com Service Role Key para ignorar RLS ou validar info)

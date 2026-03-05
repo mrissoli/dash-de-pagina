@@ -98,6 +98,19 @@ function LoginScreen({ onLogin }) {
         return;
       }
 
+      // Chama o backend /api/login para criar o cookie JWT de sessão
+      // (necessário para endpoints /api/admin/* e /api/meus-projetos)
+      try {
+        await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+      } catch {
+        // Ignora erro aqui — o dashboard ainda funciona, só o admin pode falhar
+      }
+
       // Buscar perfil na tabela do cliente
       const { data: clientData, error: dbError } = await supabase
         .from('clientes_dashboard')

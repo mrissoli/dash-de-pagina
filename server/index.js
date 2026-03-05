@@ -446,29 +446,6 @@ app.get('/api/countries', async (req, res) => {
     }
 });
 
-// ============================================
-// Runtime Config — injeta variáveis em runtime (resolve o problema do Easypanel não passar build args)
-// ============================================
-app.get('/runtime-config.js', (req, res) => {
-    res.setHeader('Content-Type', 'application/javascript');
-    res.send(`window.__RUNTIME_CONFIG__ = {
-  SUPABASE_URL: "${process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''}",
-  SUPABASE_ANON_KEY: "${process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''}"
-};`);
-});
-
-// ============================================
-// Servir Frontend estático em produção
-// ============================================
-const path = require('path');
-app.use(express.static(path.join(__dirname, 'public')));
-// SPA fallback: toda rota que NÃO seja /api retorna o index.html
-app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/runtime-config')) {
-        res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    }
-});
-
 app.listen(PORT, () => {
     console.log(`\uD83D\uDE80 Servidor rodando na porta ${PORT}`);
 });

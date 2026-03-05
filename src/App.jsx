@@ -167,14 +167,24 @@ function LoginScreen({ onLogin }) {
 // Admin Panel Component
 // ============================================================
 function AdminPanel({ user }) {
+  const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' | 'projetos'
   const [clientes, setClientes] = useState([]);
   const [projetos, setProjetos] = useState([]);
   const [selectedCliente, setSelectedCliente] = useState(null);
+
+  // Estado do formulário de cliente
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteForm, setClienteForm] = useState({ nome: '', email: '', senha: '' });
+
+  // Estado do formulário de projeto
   const [editingProjeto, setEditingProjeto] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: '' });
+  const [showProjetoForm, setShowProjetoForm] = useState(false);
+  const [projetoForm, setProjetoForm] = useState({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: '' });
+
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState({ text: '', type: '' });
+
+  const showMsg = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg({ text: '', type: '' }), 4000); };
 
   const loadClientes = useCallback(async () => {
     const res = await fetch(`${API_BASE}/admin/clientes`, { credentials: 'include' });
@@ -194,124 +204,231 @@ function AdminPanel({ user }) {
   const handleSelectCliente = (c) => {
     setSelectedCliente(c);
     loadProjetos(c.user_id);
-    setShowForm(false);
+    setShowProjetoForm(false);
     setEditingProjeto(null);
+    setActiveTab('projetos');
   };
 
-  const openCreate = () => {
-    setEditingProjeto(null);
-    setFormData({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: selectedCliente?.user_id || '' });
-    setShowForm(true);
-  };
-
-  const openEdit = (p) => {
-    setEditingProjeto(p);
-    setFormData({ nome: p.nome, google_property_id: p.google_property_id, clarity_project_id: p.clarity_project_id || '', clarity_token: p.clarity_token || '', cliente_id: p.cliente_id });
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    setSaving(true); setMsg('');
-    try {
-      const url = editingProjeto ? `${API_BASE}/admin/projetos/${editingProjeto.id}` : `${API_BASE}/admin/projetos`;
-      const method = editingProjeto ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-      const d = await res.json();
-      if (d.success) {
-        setMsg('✅ Salvo com sucesso!');
-        setShowForm(false);
-        loadProjetos(selectedCliente?.user_id || null);
-      } else { setMsg(`❌ Erro: ${d.error}`); }
-    } catch (e) { setMsg(`❌ Erro: ${e.message}`); }
+  // ---- CRUD Clientes ----
+  const handleCreateCliente = async () => {
+    if (!clienteForm.nome || !clienteForm.email || !clienteForm.senha) return showMsg('Preencha nome, e-mail e senha.', 'error');
+    setSaving(true);
+    const res = await fetch(`${API_BASE}/admin/clientes`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clienteForm) });
+    const d = await res.json();
+    if (d.success) {
+      showMsg(`✅ Cliente "${d.nome}" criado com sucesso!`);
+      setShowClienteForm(false);
+      setClienteForm({ nome: '', email: '', senha: '' });
+      loadClientes();
+    } else { showMsg(d.error, 'error'); }
     setSaving(false);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza que deseja excluir este projeto?')) return;
+  const handleDeleteCliente = async (c) => {
+    if (!window.confirm(`Excluir o cliente "${c.nome}" e todos os projetos dele?`)) return;
+    const res = await fetch(`${API_BASE}/admin/clientes/${c.user_id}`, { method: 'DELETE', credentials: 'include' });
+    const d = await res.json();
+    if (d.success) { showMsg('✅ Cliente excluído.'); loadClientes(); if (selectedCliente?.user_id === c.user_id) setSelectedCliente(null); }
+    else showMsg(d.error, 'error');
+  };
+
+  // ---- CRUD Projetos ----
+  const openCreateProjeto = () => {
+    setEditingProjeto(null);
+    setProjetoForm({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: selectedCliente?.user_id || '' });
+    setShowProjetoForm(true);
+  };
+
+  const openEditProjeto = (p) => {
+    setEditingProjeto(p);
+    setProjetoForm({ nome: p.nome, google_property_id: p.google_property_id, clarity_project_id: p.clarity_project_id || '', clarity_token: p.clarity_token || '', cliente_id: p.cliente_id });
+    setShowProjetoForm(true);
+  };
+
+  const handleSaveProjeto = async () => {
+    setSaving(true);
+    const url = editingProjeto ? `${API_BASE}/admin/projetos/${editingProjeto.id}` : `${API_BASE}/admin/projetos`;
+    const method = editingProjeto ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(projetoForm) });
+    const d = await res.json();
+    if (d.success) { showMsg('✅ Projeto salvo!'); setShowProjetoForm(false); loadProjetos(selectedCliente?.user_id || null); }
+    else showMsg(d.error, 'error');
+    setSaving(false);
+  };
+
+  const handleDeleteProjeto = async (id) => {
+    if (!window.confirm('Excluir este projeto?')) return;
     await fetch(`${API_BASE}/admin/projetos/${id}`, { method: 'DELETE', credentials: 'include' });
     loadProjetos(selectedCliente?.user_id || null);
   };
 
+  // Estilos
   const adSt = { background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '12px', padding: '20px' };
   const inputSt = { width: '100%', padding: '10px 14px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '14px', boxSizing: 'border-box' };
-  const btnSt = (color) => ({ padding: '9px 20px', background: color, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' });
+  const labelSt = { fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px', fontWeight: '500' };
+  const btnSt = (color, extra = {}) => ({ padding: '9px 18px', background: color, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', ...extra });
 
   return (
     <div style={{ padding: '32px 40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
-        <ShieldCheck size={24} color="var(--accent-color)" />
-        <div>
-          <h2 style={{ margin: 0, fontSize: '22px' }}>Painel Administrativo</h2>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>Gerencie clientes e projetos de Analytics</p>
+      {/* Cabeçalho */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ShieldCheck size={24} color="var(--accent-color)" />
+          <div>
+            <h2 style={{ margin: 0, fontSize: '22px' }}>Painel Administrativo</h2>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>Gerencie clientes e projetos de Analytics</p>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '20px', alignItems: 'start' }}>
-        {/* Lista de clientes */}
-        <div style={adSt}>
-          <div style={{ fontWeight: '700', marginBottom: '14px', fontSize: '13px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Clientes</div>
-          {clientes.map(c => (
-            <div key={c.user_id} onClick={() => handleSelectCliente(c)}
-              style={{ padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', marginBottom: '4px', background: selectedCliente?.user_id === c.user_id ? 'rgba(99,102,241,0.15)' : 'transparent', border: selectedCliente?.user_id === c.user_id ? '1px solid var(--accent-color)' : '1px solid transparent', transition: 'all 0.15s' }}>
-              <div style={{ fontWeight: '600', fontSize: '14px' }}>{c.nome || 'Sem nome'}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.email || c.user_id?.slice(0, 16) + '...'}</div>
-            </div>
-          ))}
-          {clientes.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Nenhum cliente encontrado.</div>}
-        </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', background: 'var(--surface-bg)', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid var(--surface-border)' }}>
+        {[{ key: 'clientes', label: '👥 Clientes', count: clientes.length }, { key: 'projetos', label: '📁 Projetos', count: projetos.length }].map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '13px', background: activeTab === tab.key ? 'var(--card-bg)' : 'transparent', color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-secondary)', boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.3)' : 'none', transition: 'all 0.15s' }}>
+            {tab.label} <span style={{ marginLeft: '6px', background: activeTab === tab.key ? 'var(--accent-color)' : 'var(--surface-border)', color: '#fff', fontSize: '11px', padding: '1px 7px', borderRadius: '20px' }}>{tab.count}</span>
+          </button>
+        ))}
+      </div>
 
-        {/* Projetos do cliente selecionado */}
+      {/* Feedback */}
+      {msg.text && (
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: msg.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', border: `1px solid ${msg.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)'}`, color: msg.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)', marginBottom: '16px', fontSize: '13px', fontWeight: '500' }}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* ===== ABA CLIENTES ===== */}
+      {activeTab === 'clientes' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ fontWeight: '700', fontSize: '15px' }}>
-              {selectedCliente ? `Projetos de ${selectedCliente.nome || 'Cliente'}` : 'Todos os Projetos'}
-              <span style={{ marginLeft: '10px', background: 'var(--accent-color)', color: '#fff', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{projetos.length}</span>
-            </div>
-            <button onClick={openCreate} style={btnSt('var(--accent-color)')}><Plus size={14} /> Novo Projeto</button>
+            <div style={{ fontWeight: '700', fontSize: '15px' }}>Clientes cadastrados</div>
+            <button onClick={() => setShowClienteForm(!showClienteForm)} style={btnSt('var(--accent-color)')}><Plus size={14} /> Novo Cliente</button>
           </div>
 
-          {msg && <div style={{ padding: '10px 14px', borderRadius: '8px', background: msg.startsWith('✅') ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.startsWith('✅') ? 'var(--success-color)' : 'var(--danger-color)', marginBottom: '14px', fontSize: '13px' }}>{msg}</div>}
-
-          {showForm && (
+          {showClienteForm && (
             <div style={{ ...adSt, marginBottom: '16px', border: '1px solid var(--accent-color)' }}>
-              <div style={{ fontWeight: '700', marginBottom: '16px' }}>{editingProjeto ? '✏️ Editar Projeto' : '➕ Novo Projeto'}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Nome do Projeto *</label><input style={inputSt} placeholder="Ex: Site Principal" value={formData.nome} onChange={e => setFormData({ ...formData, nome: e.target.value })} /></div>
-                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>GA4 Property ID *</label><input style={inputSt} placeholder="Ex: 504225943" value={formData.google_property_id} onChange={e => setFormData({ ...formData, google_property_id: e.target.value })} /></div>
-                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clarity Project ID</label><input style={inputSt} placeholder="Ex: abc123xyz" value={formData.clarity_project_id} onChange={e => setFormData({ ...formData, clarity_project_id: e.target.value })} /></div>
-                <div><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clarity API Token</label><input style={inputSt} placeholder="Bearer token do Clarity" value={formData.clarity_token} onChange={e => setFormData({ ...formData, clarity_token: e.target.value })} /></div>
-                {!selectedCliente && <div style={{ gridColumn: '1/-1' }}><label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Cliente ID (user_id)</label><input style={inputSt} placeholder="UUID do cliente" value={formData.cliente_id} onChange={e => setFormData({ ...formData, cliente_id: e.target.value })} /></div>}
+              <div style={{ fontWeight: '700', marginBottom: '16px', fontSize: '15px' }}>➕ Criar novo cliente</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={labelSt}>Nome completo *</label>
+                  <input style={inputSt} placeholder="Ex: João da Silva" value={clienteForm.nome} onChange={e => setClienteForm({ ...clienteForm, nome: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelSt}>E-mail *</label>
+                  <input style={inputSt} type="email" placeholder="joao@empresa.com" value={clienteForm.email} onChange={e => setClienteForm({ ...clienteForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelSt}>Senha de acesso *</label>
+                  <input style={inputSt} type="password" placeholder="Mínimo 6 caracteres" value={clienteForm.senha} onChange={e => setClienteForm({ ...clienteForm, senha: e.target.value })} />
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                <button onClick={handleSave} disabled={saving} style={btnSt('#10b981')}><Check size={14} />{saving ? 'Salvando...' : 'Salvar'}</button>
-                <button onClick={() => { setShowForm(false); setMsg(''); }} style={{ ...btnSt('transparent'), border: '1px solid var(--surface-border)', color: 'var(--text-secondary)' }}><X size={14} /> Cancelar</button>
+                <button onClick={handleCreateCliente} disabled={saving} style={btnSt('#10b981')}><Check size={14} />{saving ? 'Criando...' : 'Criar Cliente'}</button>
+                <button onClick={() => { setShowClienteForm(false); setClienteForm({ nome: '', email: '', senha: '' }); }} style={{ ...btnSt('transparent'), border: '1px solid var(--surface-border)', color: 'var(--text-secondary)' }}><X size={14} /> Cancelar</button>
               </div>
+              <p style={{ margin: '12px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>💡 O cliente será criado no Supabase Authentication automaticamente e poderá fazer login imediatamente.</p>
             </div>
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {projetos.map(p => (
-              <div key={p.id} style={{ ...adSt, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <FolderOpen size={18} color="var(--accent-color)" />
+            {clientes.map(c => (
+              <div key={c.user_id} style={{ ...adSt, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(16,185,129,0.2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: '700', fontSize: '16px', color: 'var(--accent-color)' }}>
+                  {c.nome?.charAt(0)?.toUpperCase() || '?'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{p.nome}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                    <span>📊 GA4: <code style={{ color: 'var(--accent-color)' }}>{p.google_property_id}</code></span>
-                    {p.clarity_project_id && <span>🎯 Clarity: <code style={{ color: '#10b981' }}>{p.clarity_project_id}</code></span>}
-                  </div>
+                  <div style={{ fontWeight: '700', fontSize: '15px' }}>{c.nome || 'Sem nome'}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.email}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted, #555)', marginTop: '2px', fontFamily: 'monospace' }}>{c.user_id}</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                  <button onClick={() => openEdit(p)} style={{ ...btnSt('rgba(99,102,241,0.2)'), color: 'var(--accent-color)', border: '1px solid rgba(99,102,241,0.3)' }}><Pencil size={13} /></button>
-                  <button onClick={() => handleDelete(p.id)} style={{ ...btnSt('rgba(239,68,68,0.15)'), color: 'var(--danger-color)', border: '1px solid rgba(239,68,68,0.3)' }}><Trash2 size={13} /></button>
+                  <button onClick={() => handleSelectCliente(c)} style={{ ...btnSt('rgba(99,102,241,0.15)'), color: 'var(--accent-color)', border: '1px solid rgba(99,102,241,0.3)' }}><FolderOpen size={13} /> Projetos</button>
+                  <button onClick={() => handleDeleteCliente(c)} style={{ ...btnSt('rgba(239,68,68,0.1)'), color: 'var(--danger-color)', border: '1px solid rgba(239,68,68,0.3)' }}><Trash2 size={13} /></button>
                 </div>
               </div>
             ))}
-            {projetos.length === 0 && !showForm && <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--card-bg)', borderRadius: '12px', border: '1px dashed var(--surface-border)' }}>Nenhum projeto cadastrado. Clique em "Novo Projeto" para começar.</div>}
+            {clientes.length === 0 && !showClienteForm && (
+              <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--card-bg)', borderRadius: '12px', border: '1px dashed var(--surface-border)' }}>
+                <Users size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                <div style={{ fontWeight: '600', marginBottom: '6px' }}>Nenhum cliente cadastrado</div>
+                <div style={{ fontSize: '13px' }}>Clique em "Novo Cliente" para adicionar o primeiro.</div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ===== ABA PROJETOS ===== */}
+      {activeTab === 'projetos' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '20px', alignItems: 'start' }}>
+          {/* Sidebar de clientes */}
+          <div style={adSt}>
+            <div style={{ fontWeight: '700', marginBottom: '12px', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Filtrar por Cliente</div>
+            <div onClick={() => { setSelectedCliente(null); loadProjetos(null); }}
+              style={{ padding: '8px 10px', borderRadius: '8px', cursor: 'pointer', marginBottom: '4px', background: !selectedCliente ? 'rgba(99,102,241,0.15)' : 'transparent', border: !selectedCliente ? '1px solid var(--accent-color)' : '1px solid transparent', fontSize: '13px', fontWeight: !selectedCliente ? '600' : '400', color: !selectedCliente ? 'var(--accent-color)' : 'var(--text-primary)' }}>
+              Todos os Projetos
+            </div>
+            {clientes.map(c => (
+              <div key={c.user_id} onClick={() => { setSelectedCliente(c); loadProjetos(c.user_id); }}
+                style={{ padding: '8px 10px', borderRadius: '8px', cursor: 'pointer', marginBottom: '4px', background: selectedCliente?.user_id === c.user_id ? 'rgba(99,102,241,0.15)' : 'transparent', border: selectedCliente?.user_id === c.user_id ? '1px solid var(--accent-color)' : '1px solid transparent', transition: 'all 0.15s' }}>
+                <div style={{ fontWeight: '600', fontSize: '13px' }}>{c.nome || 'Sem nome'}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{c.email}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Lista e form de projetos */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontWeight: '700', fontSize: '15px' }}>
+                {selectedCliente ? `Projetos de ${selectedCliente.nome}` : 'Todos os Projetos'}
+                <span style={{ marginLeft: '10px', background: 'var(--accent-color)', color: '#fff', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{projetos.length}</span>
+              </div>
+              <button onClick={openCreateProjeto} style={btnSt('var(--accent-color)')}><Plus size={14} /> Novo Projeto</button>
+            </div>
+
+            {showProjetoForm && (
+              <div style={{ ...adSt, marginBottom: '16px', border: '1px solid var(--accent-color)' }}>
+                <div style={{ fontWeight: '700', marginBottom: '16px' }}>{editingProjeto ? '✏️ Editar Projeto' : '➕ Novo Projeto'}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div><label style={labelSt}>Nome do Projeto *</label><input style={inputSt} placeholder="Ex: Site Principal" value={projetoForm.nome} onChange={e => setProjetoForm({ ...projetoForm, nome: e.target.value })} /></div>
+                  <div><label style={labelSt}>GA4 Property ID *</label><input style={inputSt} placeholder="Ex: 504225943" value={projetoForm.google_property_id} onChange={e => setProjetoForm({ ...projetoForm, google_property_id: e.target.value })} /></div>
+                  <div><label style={labelSt}>Clarity Project ID</label><input style={inputSt} placeholder="Ex: abc123xyz" value={projetoForm.clarity_project_id} onChange={e => setProjetoForm({ ...projetoForm, clarity_project_id: e.target.value })} /></div>
+                  <div><label style={labelSt}>Clarity API Token</label><input style={inputSt} placeholder="Bearer token do Clarity" value={projetoForm.clarity_token} onChange={e => setProjetoForm({ ...projetoForm, clarity_token: e.target.value })} /></div>
+                  {!selectedCliente && <div style={{ gridColumn: '1/-1' }}><label style={labelSt}>Cliente (user_id)</label><input style={inputSt} placeholder="UUID do cliente" value={projetoForm.cliente_id} onChange={e => setProjetoForm({ ...projetoForm, cliente_id: e.target.value })} /></div>}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                  <button onClick={handleSaveProjeto} disabled={saving} style={btnSt('#10b981')}><Check size={14} />{saving ? 'Salvando...' : 'Salvar'}</button>
+                  <button onClick={() => setShowProjetoForm(false)} style={{ ...btnSt('transparent'), border: '1px solid var(--surface-border)', color: 'var(--text-secondary)' }}><X size={14} /> Cancelar</button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {projetos.map(p => (
+                <div key={p.id} style={{ ...adSt, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FolderOpen size={18} color="var(--accent-color)" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{p.nome}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                      <span>📊 GA4: <code style={{ color: 'var(--accent-color)' }}>{p.google_property_id}</code></span>
+                      {p.clarity_project_id && <span>🎯 Clarity: <code style={{ color: '#10b981' }}>{p.clarity_project_id}</code></span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                    <button onClick={() => openEditProjeto(p)} style={{ ...btnSt('rgba(99,102,241,0.2)'), color: 'var(--accent-color)', border: '1px solid rgba(99,102,241,0.3)' }}><Pencil size={13} /></button>
+                    <button onClick={() => handleDeleteProjeto(p.id)} style={{ ...btnSt('rgba(239,68,68,0.15)'), color: 'var(--danger-color)', border: '1px solid rgba(239,68,68,0.3)' }}><Trash2 size={13} /></button>
+                  </div>
+                </div>
+              ))}
+              {projetos.length === 0 && !showProjetoForm && <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--card-bg)', borderRadius: '12px', border: '1px dashed var(--surface-border)' }}>Nenhum projeto cadastrado para este cliente.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -190,6 +190,70 @@ app.get('/api/admin/clientes', requireAdmin, async (req, res) => {
 });
 
 // ============================================
+// ADMIN: Criar novo cliente (Auth + clientes_dashboard)
+// ============================================
+app.post('/api/admin/clientes', requireAdmin, async (req, res) => {
+    try {
+        const { nome, email, senha } = req.body;
+        if (!nome || !email || !senha) {
+            return res.status(400).json({ success: false, error: 'Campos obrigatórios: nome, email, senha' });
+        }
+
+        // 1. Cria o usuário no Supabase Auth (service_role bypasses email confirmation)
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email,
+            password: senha,
+            email_confirm: true, // Já confirma o e-mail automaticamente
+            user_metadata: { nome }
+        });
+
+        if (authError) {
+            return res.status(400).json({ success: false, error: `Erro no Auth: ${authError.message}` });
+        }
+
+        const userId = authData.user.id;
+
+        // 2. Cria o registro na tabela clientes_dashboard
+        const { error: dbError } = await supabase
+            .from('clientes_dashboard')
+            .insert([{ user_id: userId, nome, email }]);
+
+        if (dbError) {
+            // Rollback: remove o usuário criado no Auth se falhou no banco
+            await supabase.auth.admin.deleteUser(userId);
+            return res.status(500).json({ success: false, error: `Erro no banco: ${dbError.message}` });
+        }
+
+        res.json({ success: true, user_id: userId, nome, email });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Deletar cliente (Auth + clientes_dashboard)
+// ============================================
+app.delete('/api/admin/clientes/:userId', requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Deleta projetos do cliente
+        await supabase.from('projetos').delete().eq('cliente_id', userId);
+
+        // Deleta da tabela clientes_dashboard
+        await supabase.from('clientes_dashboard').delete().eq('user_id', userId);
+
+        // Deleta do Supabase Auth
+        const { error } = await supabase.auth.admin.deleteUser(userId);
+        if (error) throw error;
+
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
 // ADMIN: Listar projetos de um cliente
 // ============================================
 app.get('/api/admin/projetos', requireAdmin, async (req, res) => {

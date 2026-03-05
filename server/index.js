@@ -25,9 +25,7 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
-// GA4 Client
-// Suporta credenciais via variável de ambiente GOOGLE_APPLICATION_CREDENTIALS_JSON
-// (valor: conteúdo JSON da service account, pode ser base64 ou JSON puro)
+// GA4 Client — credenciais via GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON puro ou base64)
 let analyticsDataClient;
 try {
     let clientOptions = {};
@@ -35,19 +33,16 @@ try {
     if (credJson) {
         let parsed;
         try {
-            // Tenta JSON puro primeiro
             parsed = JSON.parse(credJson);
         } catch {
-            // Fallback: tenta base64
             parsed = JSON.parse(Buffer.from(credJson, 'base64').toString('utf8'));
         }
         clientOptions.credentials = parsed;
     }
     analyticsDataClient = new BetaAnalyticsDataClient(clientOptions);
-    console.log('✅ Google Analytics client inicializado com sucesso.');
+    console.log('GA4 client inicializado com sucesso.');
 } catch (err) {
-    console.error('❌ Falha ao inicializar Google Analytics client:', err.message);
-    console.error('   Defina GOOGLE_APPLICATION_CREDENTIALS_JSON ou GOOGLE_APPLICATION_CREDENTIALS nas variáveis de ambiente.');
+    console.error('Falha ao inicializar GA4 client:', err.message);
     analyticsDataClient = null;
 }
 
@@ -151,7 +146,7 @@ app.get('/api/metrics', async (req, res) => {
         // ---- Google Analytics ----
         if (propertyId) {
             if (!analyticsDataClient) {
-                return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON nas variáveis de ambiente do servidor.' });
+                return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
             }
             const [response] = await analyticsDataClient.runReport({
                 property: `properties/${propertyId}`,
@@ -479,28 +474,22 @@ app.get('/api/countries', async (req, res) => {
     }
 });
 
-// ============================================
-// Healthcheck
-// ============================================
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
-        ga4Client: analyticsDataClient ? 'ready' : 'not initialized (check GOOGLE_APPLICATION_CREDENTIALS_JSON)',
+        ga4Client: analyticsDataClient ? 'ready' : 'not initialized',
         timestamp: new Date().toISOString()
     });
 });
 
-// ============================================
-// Handlers globais para evitar crash do servidor
-// ============================================
 process.on('uncaughtException', (err) => {
-    console.error('❌ uncaughtException:', err.message, err.stack);
+    console.error('uncaughtException:', err.message, err.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
-    console.error('❌ unhandledRejection:', reason);
+    console.error('unhandledRejection:', reason);
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });

@@ -18,10 +18,23 @@ const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta-muito-segura';
 
 // Supabase (Usado APENAS no backend com Service Role Key para ignorar RLS ou validar info)
 let supabase;
+let supabaseAdmin; // cliente dedicado com service role para bypass de RLS
 try {
     const supaUrl = process.env.SUPABASE_URL || 'https://example.supabase.co';
     const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy';
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     supabase = createClient(supaUrl, supaKey);
+    // supabaseAdmin usa APENAS a service role key — nunca cai para anon key
+    // Sem service role key, consultas admin retornarão erro claro
+    if (serviceRoleKey) {
+        supabaseAdmin = createClient(supaUrl, serviceRoleKey, {
+            auth: { autoRefreshToken: false, persistSession: false }
+        });
+        console.log('Supabase Admin client (service role) inicializado.');
+    } else {
+        console.warn('⚠️  SUPABASE_SERVICE_ROLE_KEY não configurada! Endpoints admin usarão client padrão (RLS ativo).');
+        supabaseAdmin = supabase; // fallback degradado
+    }
 } catch (err) {
     console.error("Falha ao inicializar Supabase:", err.message);
 }
@@ -185,7 +198,7 @@ const requireAdmin = async (req, res, next) => {
 // ============================================
 app.get('/api/admin/clientes', requireAdmin, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('clientes_dashboard')
             .select('user_id, nome, email')
             .order('nome');
@@ -207,7 +220,7 @@ app.post('/api/admin/clientes', requireAdmin, async (req, res) => {
         }
 
         // 1. Cria o usuário no Supabase Auth (service_role bypasses email confirmation)
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password: senha,
             email_confirm: true, // Já confirma o e-mail automaticamente
@@ -221,13 +234,13 @@ app.post('/api/admin/clientes', requireAdmin, async (req, res) => {
         const userId = authData.user.id;
 
         // 2. Cria o registro na tabela clientes_dashboard
-        const { error: dbError } = await supabase
+        const { error: dbError } = await supabaseAdmin
             .from('clientes_dashboard')
             .insert([{ user_id: userId, nome, email }]);
 
         if (dbError) {
             // Rollback: remove o usuário criado no Auth se falhou no banco
-            await supabase.auth.admin.deleteUser(userId);
+            await supabaseAdmin.auth.admin.deleteUser(userId);
             return res.status(500).json({ success: false, error: `Erro no banco: ${dbError.message}` });
         }
 
@@ -245,13 +258,13 @@ app.delete('/api/admin/clientes/:userId', requireAdmin, async (req, res) => {
         const { userId } = req.params;
 
         // Deleta projetos do cliente
-        await supabase.from('projetos').delete().eq('cliente_id', userId);
+        await supabaseAdmin.from('projetos').delete().eq('cliente_id', userId);
 
         // Deleta da tabela clientes_dashboard
-        await supabase.from('clientes_dashboard').delete().eq('user_id', userId);
+        await supabaseAdmin.from('clientes_dashboard').delete().eq('user_id', userId);
 
         // Deleta do Supabase Auth
-        const { error } = await supabase.auth.admin.deleteUser(userId);
+        const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
         if (error) throw error;
 
         res.json({ success: true });
@@ -266,7 +279,7 @@ app.delete('/api/admin/clientes/:userId', requireAdmin, async (req, res) => {
 app.get('/api/admin/projetos', requireAdmin, async (req, res) => {
     try {
         const { clienteId } = req.query;
-        let query = supabase
+        let query = supabaseAdmin
             .from('projetos')
             .select('id, nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo')
             .order('nome');
@@ -289,7 +302,7 @@ app.post('/api/admin/projetos', requireAdmin, async (req, res) => {
         if (!nome || !google_property_id || !cliente_id) {
             return res.status(400).json({ success: false, error: 'Campos obrigatórios: nome, google_property_id, cliente_id' });
         }
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('projetos')
             .insert([{ nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo: true }])
             .select()
@@ -308,7 +321,7 @@ app.put('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { nome, google_property_id, clarity_project_id, clarity_token, ativo } = req.body;
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('projetos')
             .update({ nome, google_property_id, clarity_project_id, clarity_token, ativo })
             .eq('id', id)
@@ -327,7 +340,7 @@ app.put('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
 app.delete('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { error } = await supabase.from('projetos').delete().eq('id', id);
+        const { error } = await supabaseAdmin.from('projetos').delete().eq('id', id);
         if (error) throw error;
         res.json({ success: true });
     } catch (error) {

@@ -26,7 +26,30 @@ const supabase = createClient(
 );
 
 // GA4 Client
-const analyticsDataClient = new BetaAnalyticsDataClient();
+// Suporta credenciais via variável de ambiente GOOGLE_APPLICATION_CREDENTIALS_JSON
+// (valor: conteúdo JSON da service account, pode ser base64 ou JSON puro)
+let analyticsDataClient;
+try {
+    let clientOptions = {};
+    const credJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (credJson) {
+        let parsed;
+        try {
+            // Tenta JSON puro primeiro
+            parsed = JSON.parse(credJson);
+        } catch {
+            // Fallback: tenta base64
+            parsed = JSON.parse(Buffer.from(credJson, 'base64').toString('utf8'));
+        }
+        clientOptions.credentials = parsed;
+    }
+    analyticsDataClient = new BetaAnalyticsDataClient(clientOptions);
+    console.log('✅ Google Analytics client inicializado com sucesso.');
+} catch (err) {
+    console.error('❌ Falha ao inicializar Google Analytics client:', err.message);
+    console.error('   Defina GOOGLE_APPLICATION_CREDENTIALS_JSON ou GOOGLE_APPLICATION_CREDENTIALS nas variáveis de ambiente.');
+    analyticsDataClient = null;
+}
 
 // ============================================
 // MIDDLEWARE: Verifica Autenticação e injeta perfil "PropertyID"
@@ -127,6 +150,9 @@ app.get('/api/metrics', async (req, res) => {
 
         // ---- Google Analytics ----
         if (propertyId) {
+            if (!analyticsDataClient) {
+                return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON nas variáveis de ambiente do servidor.' });
+            }
             const [response] = await analyticsDataClient.runReport({
                 property: `properties/${propertyId}`,
                 dateRanges: [{ startDate, endDate: 'today' }],
@@ -210,6 +236,7 @@ app.get('/api/traffic', async (req, res) => {
         const clarityToken = req.query.clarityToken;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         // ---- Google Analytics ----
         const [response] = await analyticsDataClient.runReport({
@@ -269,6 +296,7 @@ app.get('/api/top-pages', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const startDate = req.query.dateRange || '7daysAgo';
 
@@ -301,6 +329,7 @@ app.get('/api/sources', async (req, res) => {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
@@ -338,6 +367,7 @@ app.get('/api/events', async (req, res) => {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
@@ -367,6 +397,7 @@ app.get('/api/devices', async (req, res) => {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
@@ -395,6 +426,7 @@ app.get('/api/browsers', async (req, res) => {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
@@ -424,6 +456,7 @@ app.get('/api/countries', async (req, res) => {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
@@ -446,6 +479,28 @@ app.get('/api/countries', async (req, res) => {
     }
 });
 
+// ============================================
+// Healthcheck
+// ============================================
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        ga4Client: analyticsDataClient ? 'ready' : 'not initialized (check GOOGLE_APPLICATION_CREDENTIALS_JSON)',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ============================================
+// Handlers globais para evitar crash do servidor
+// ============================================
+process.on('uncaughtException', (err) => {
+    console.error('❌ uncaughtException:', err.message, err.stack);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ unhandledRejection:', reason);
+});
+
 app.listen(PORT, () => {
-    console.log(`\uD83D\uDE80 Servidor rodando na porta ${PORT}`);
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });

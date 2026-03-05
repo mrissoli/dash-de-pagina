@@ -1,33 +1,37 @@
-# Etapa 1: Build do React
-FROM node:20-alpine AS build
+# ===== Etapa 1: Build do Frontend React =====
+FROM node:20-alpine AS frontend-build
 
-WORKDIR /app
+WORKDIR /frontend
 
 COPY package*.json ./
 RUN npm install
 
 COPY . .
 
-# Argumentos de build para variáveis de ambiente do Vite
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_API_BASE
-
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV VITE_API_BASE=$VITE_API_BASE
+# Em produção, a API roda no mesmo servidor (sem URL separada)
+ENV VITE_API_BASE=/api
 
 RUN npm run build
 
-# Etapa 2: Servir com Nginx
-FROM nginx:alpine
+# ===== Etapa 2: Backend Node.js + Frontend Estático =====
+FROM node:20-alpine
 
-# Copia os arquivos buildados
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Configuração do Nginx para SPA (resolve o problema de rotas 404)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copia e instala dependências do backend
+COPY server/package*.json ./
+RUN npm install --omit=dev
 
-EXPOSE 80
+# Copia código do backend
+COPY server/ .
 
-CMD ["nginx", "-g", "daemon off;"]
+# Copia o frontend buildado para a pasta public do backend
+COPY --from=frontend-build /frontend/dist ./public
+
+EXPOSE 3001
+
+CMD ["node", "index.js"]

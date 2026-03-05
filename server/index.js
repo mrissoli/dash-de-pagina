@@ -446,6 +446,18 @@ app.get('/api/countries', async (req, res) => {
     }
 });
 
+// ============================================
+// Servir Frontend estático em produção
+// ============================================
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
+// SPA fallback: toda rota que NÃO seja /api retorna o index.html
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
+});
+
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor protegido da API rodando na porta ${PORT}`);
+    console.log(`\uD83D\uDE80 Servidor rodando na porta ${PORT}`);
 });

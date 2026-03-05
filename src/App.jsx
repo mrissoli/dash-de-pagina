@@ -8,7 +8,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, Cell
 } from 'recharts';
-import { supabase } from './lib/supabase';
+
+const API_BASE = 'http://localhost:3001/api';
 
 // --- MOCK DATA ---
 const trafficData = [
@@ -40,14 +41,11 @@ const topPages = [
 const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'];
 
 // --- COMPONENTS ---
-
 const MetricCard = ({ title, value, change, trend, icon: Icon, colorClass, isLive }) => (
   <div className="glass-card metric-card">
     <div className="metric-header">
       <span className="metric-title">{title}</span>
-      <div className={`metric-icon ${colorClass}`}>
-        <Icon size={20} />
-      </div>
+      <div className={`metric-icon ${colorClass}`}><Icon size={20} /></div>
     </div>
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
       <span className="metric-value">{value}</span>
@@ -86,7 +84,6 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 // --- SCREENS ---
-
 function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -98,104 +95,63 @@ function LoginScreen({ onLogin }) {
     setIsLoading(true);
     setErrorMsg('');
 
-    // Passo 1: Autenticar no Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
+    try {
+      // O Frontend APENAS chama o seu backend Node. Nenhuma chave do Supabase existe aqui.
+      const res = await fetch(`${API_BASE}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include' // Essencial para o Node definir o Cookie HTTPOnly
+      });
 
-    if (authError) {
-      setErrorMsg('Login inválido. Verifique suas credenciais.');
+      const data = await res.json();
       setIsLoading(false);
-      return;
+
+      if (res.ok && data.success) {
+        // Envia apenas os dados de nome e email para o estado do React
+        onLogin(data.user);
+      } else {
+        setErrorMsg(data.error || 'Erro ao realizar login.');
+      }
+    } catch (err) {
+      setIsLoading(false);
+      setErrorMsg('Erro de conexão ao servidor.');
     }
-
-    // Passo 2: Buscar o Property ID / Dados customizados do Cliente na Tabela 'clientes_dashboard'
-    const { data: clientData, error: dbError } = await supabase
-      .from('clientes_dashboard')
-      .select('nome, google_property_id, clarity_project_id')
-      .eq('user_id', authData.user.id)
-      .single();
-
-    setIsLoading(false);
-
-    if (dbError || !clientData) {
-      setErrorMsg('Conta autenticada, mas perfil de Dashboard não encontrado no banco.');
-      return;
-    }
-
-    // Passar para a Dashboard os IDs amarrados e ocultos
-    onLogin({
-      id: authData.user.id,
-      name: clientData.nome,
-      email: authData.user.email,
-      ga4PropertyId: clientData.google_property_id,
-      clarityProjectId: clientData.clarity_project_id
-    });
   };
 
   return (
     <div className="login-container">
       <div className="login-card glass-card">
         <div className="login-header">
-          <div className="login-logo-circle">
-            <Activity size={32} color="var(--accent-color)" />
-          </div>
+          <div className="login-logo-circle"><Activity size={32} color="var(--accent-color)" /></div>
           <h2>Portal do Cliente</h2>
           <p>Acesse seu painel exclusivo de tráfego</p>
         </div>
-
         {errorMsg && (
           <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger-color)', borderRadius: '8px', color: 'var(--danger-color)', fontSize: '13px', textAlign: 'center' }}>
             {errorMsg}
           </div>
         )}
-
         <form onSubmit={handleSubmit} className="login-form">
           <div className="input-group">
             <label>E-mail Corporativo</label>
             <div className="input-wrapper">
               <Mail size={18} className="input-icon" />
-              <input
-                type="email"
-                placeholder="cliente@empresa.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <input type="email" placeholder="cliente@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
           </div>
-
           <div className="input-group">
             <label>Senha</label>
             <div className="input-wrapper">
               <Lock size={18} className="input-icon" />
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
           </div>
-
           <button type="submit" className="login-button" disabled={isLoading}>
-            {isLoading ? (
-              <div className="loader"></div>
-            ) : (
-              <>
-                Entrar no Dashboard
-                <LogIn size={18} />
-              </>
-            )}
+            {isLoading ? <div className="loader"></div> : <>Entrar no Dashboard<LogIn size={18} /></>}
           </button>
         </form>
-
-        <div className="login-footer">
-          <Shield size={14} />
-          <span>Acesso seguro e criptografado</span>
-        </div>
+        <div className="login-footer"><Shield size={14} /><span>Acesso seguro e criptografado</span></div>
       </div>
     </div>
   );
@@ -207,46 +163,22 @@ function DashboardScreen({ user, onLogout }) {
   return (
     <>
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <Activity size={28} color="var(--accent-color)" />
-          <span>MetricDash</span>
-        </div>
-
+        <div className="sidebar-logo"><Activity size={28} color="var(--accent-color)" /><span>MetricDash</span></div>
         <div className="nav-menu">
           <div className="nav-section-title">Principal</div>
-          <div className={`nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveNav('dashboard')}>
-            <LayoutDashboard size={18} /> Resumo
-          </div>
-          <div className={`nav-item ${activeNav === 'analytics' ? 'active' : ''}`} onClick={() => setActiveNav('analytics')}>
-            <BarChart3 size={18} /> Analytics Base
-          </div>
-          <div className={`nav-item ${activeNav === 'clarity' ? 'active' : ''}`} onClick={() => setActiveNav('clarity')}>
-            <MonitorPlay size={18} /> Mapas de Calor
-          </div>
+          <div className={`nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveNav('dashboard')}><LayoutDashboard size={18} /> Resumo</div>
+          <div className={`nav-item ${activeNav === 'analytics' ? 'active' : ''}`} onClick={() => setActiveNav('analytics')}><BarChart3 size={18} /> Analytics Base</div>
+          <div className={`nav-item ${activeNav === 'clarity' ? 'active' : ''}`} onClick={() => setActiveNav('clarity')}><MonitorPlay size={18} /> Mapas de Calor</div>
         </div>
-
-        {/* User Info no final da sidebar */}
         <div style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px solid var(--surface-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="user-profile">{user.name.charAt(0)}</div>
+            <div className="user-profile">{user?.nome?.charAt(0) || user?.name?.charAt(0) || '?'}</div>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontWeight: '600', fontSize: '14px' }}>{user.name}</div>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>{user.nome || user.name}</div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.email}</div>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            style={{
-              marginTop: '16px', width: '100%', padding: '8px',
-              background: 'transparent', border: '1px solid var(--surface-border)',
-              color: 'var(--text-secondary)', borderRadius: '8px', cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => { e.target.style.color = 'var(--text-primary)'; e.target.style.borderColor = 'var(--text-primary)'; }}
-            onMouseOut={(e) => { e.target.style.color = 'var(--text-secondary)'; e.target.style.borderColor = 'var(--surface-border)'; }}
-          >
-            Sair da Conta
-          </button>
+          <button onClick={onLogout} style={{ marginTop: '16px', width: '100%', padding: '8px', background: 'transparent', border: '1px solid var(--surface-border)', color: 'var(--text-secondary)', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>Sair da Conta</button>
         </div>
       </aside>
 
@@ -254,15 +186,10 @@ function DashboardScreen({ user, onLogout }) {
         <header className="header">
           <div className="header-title">
             <h1>Visão Geral da Conta</h1>
-            <p>Dados combinados: Google Analytics + Microsoft Clarity</p>
+            <p>Dados combinados de forma segura pelo Servidor</p>
           </div>
           <div className="header-actions">
-            <div className="date-picker">
-              <Calendar size={16} color="var(--text-secondary)" />
-              <span>Últimos 7 dias</span>
-              <ChevronDown size={16} color="var(--text-secondary)" />
-            </div>
-            <div style={{ padding: '8px', cursor: 'pointer' }}><Bell size={20} color="var(--text-secondary)" /></div>
+            <div className="date-picker"><Calendar size={16} color="var(--text-secondary)" /><span>Últimos 7 dias</span><ChevronDown size={16} color="var(--text-secondary)" /></div>
           </div>
         </header>
 
@@ -278,10 +205,6 @@ function DashboardScreen({ user, onLogout }) {
             <div className="glass-card">
               <div className="card-title-row">
                 <span className="card-title">Tráfego vs Interações Interativas</span>
-                <div className="badge-row">
-                  <span className="badge badge-analytics">GA: Acessos</span>
-                  <span className="badge badge-clarity">Clarity: Cliques/Scroll</span>
-                </div>
               </div>
               <div style={{ height: '300px', width: '100%' }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -304,7 +227,6 @@ function DashboardScreen({ user, onLogout }) {
             <div className="glass-card">
               <div className="card-title-row">
                 <span className="card-title">Canais de Origem</span>
-                <span className="badge badge-analytics">GA</span>
               </div>
               <div style={{ height: '300px', width: '100%' }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -323,7 +245,6 @@ function DashboardScreen({ user, onLogout }) {
               </div>
             </div>
           </div>
-
         </div>
       </main>
     </>
@@ -332,37 +253,39 @@ function DashboardScreen({ user, onLogout }) {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Verifica se o usuário já tem uma sessão salva no navegador no Load
+  // Sem keys no front: o navegador apenas envia o Cookie HTTPOnly para o servidor
+  // que por sua vez responde se a sessão é válida e devolve as info de nome do usuário
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Se houver sessão, puxamos os ids da tabela e logamos ele transparentemente
-        const { data: clientData } = await supabase
-          .from('clientes_dashboard')
-          .select('nome, google_property_id, clarity_project_id')
-          .eq('user_id', session.user.id)
-          .single();
-
-        if (clientData) {
-          setCurrentUser({
-            id: session.user.id,
-            name: clientData.nome,
-            email: session.user.email,
-            ga4PropertyId: clientData.google_property_id,
-            clarityProjectId: clientData.clarity_project_id
-          });
+      try {
+        const res = await fetch(`${API_BASE}/session`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            setCurrentUser(data.user);
+          }
         }
+      } catch (err) {
+        console.warn("Sessão não existe ou expirou.");
+      } finally {
+        setIsInitializing(false);
       }
     };
     checkSession();
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
+    } catch (err) { }
     setCurrentUser(null);
   };
+
+  if (isInitializing) {
+    return <div className="login-container"><div className="loader"></div></div>;
+  }
 
   return (
     <div className="app-container">

@@ -382,6 +382,15 @@ app.get('/api/metrics', async (req, res) => {
             if (!analyticsDataClient) {
                 return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
             }
+            // Cria filtro de página se fornecido
+            const pagePath = req.query.pagePath;
+            const dimensionFilter = pagePath ? {
+                filter: {
+                    fieldName: 'pagePath',
+                    stringFilter: { matchType: 'EXACT', value: pagePath }
+                }
+            } : undefined;
+
             const [response] = await analyticsDataClient.runReport({
                 property: `properties/${propertyId}`,
                 dateRanges: [{ startDate, endDate: 'today' }],
@@ -393,6 +402,7 @@ app.get('/api/metrics', async (req, res) => {
                     { name: 'newUsers' },
                     { name: 'screenPageViewsPerSession' }
                 ],
+                ...(dimensionFilter && { dimensionFilter }),
             });
             if (response && response.rows && response.rows.length > 0) {
                 const row = response.rows[0].metricValues;
@@ -468,11 +478,20 @@ app.get('/api/traffic', async (req, res) => {
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         // ---- Google Analytics ----
+        const pagePath = req.query.pagePath;
+        const dimensionFilter = pagePath ? {
+            filter: {
+                fieldName: 'pagePath',
+                stringFilter: { matchType: 'EXACT', value: pagePath }
+            }
+        } : undefined;
+
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
             dateRanges: [{ startDate, endDate: 'today' }],
             dimensions: [{ name: 'date' }],
             metrics: [{ name: 'sessions' }],
+            ...(dimensionFilter && { dimensionFilter }),
         });
 
         const formattedData = response.rows.map(row => ({
@@ -513,6 +532,36 @@ app.get('/api/traffic', async (req, res) => {
         }
 
         res.json({ success: true, data: formattedData });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Endpoint: Listar Page Paths disponíveis (GA4)
+// ============================================
+app.get('/api/pages', async (req, res) => {
+    try {
+        const propertyId = req.query.propertyId;
+        const startDate = req.query.dateRange || '30daysAgo';
+        if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const [response] = await analyticsDataClient.runReport({
+            property: `properties/${propertyId}`,
+            dateRanges: [{ startDate, endDate: 'today' }],
+            dimensions: [{ name: 'pagePath' }],
+            metrics: [{ name: 'screenPageViews' }],
+            orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+            limit: 100,
+        });
+
+        const pages = (response.rows || []).map(row => ({
+            path: row.dimensionValues[0].value,
+            views: parseInt(row.metricValues[0].value, 10)
+        }));
+
+        res.json({ success: true, data: pages });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

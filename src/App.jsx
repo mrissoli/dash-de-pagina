@@ -473,6 +473,12 @@ function DashboardScreen({ user, onLogout }) {
   const [selectedProjeto, setSelectedProjeto] = useState(null);
   const [showProjetoMenu, setShowProjetoMenu] = useState(false);
 
+  // Filtro de página
+  const [pages, setPages] = useState([]);
+  const [selectedPage, setSelectedPage] = useState(null); // null = todas as páginas
+  const [showPageMenu, setShowPageMenu] = useState(false);
+  const [pageSearch, setPageSearch] = useState('');
+
   // Métricas
   const [metrics, setMetrics] = useState({
     totalVisitsGA: '...', bounceRateGA: '...', activeUsersClarity: '...', avgTimeGA: '...', activeUsersGA: '...', newUsersGA: '...', pagesPerSessionGA: '...'
@@ -546,14 +552,15 @@ function DashboardScreen({ user, onLogout }) {
         const dr = `&dateRange=${dateRange}`;
         const pid = `propertyId=${selectedProjeto.google_property_id}`;
         const ct = `&clarityToken=${encodeURIComponent(selectedProjeto.clarity_token || '')}`;
+        const pp = selectedPage ? `&pagePath=${encodeURIComponent(selectedPage.path)}` : '';
         const [resMetrics, resTraffic, resSources, resEvents, resDevices, resBrowsers, resCountries, resTopPages] = await Promise.all([
-          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/sources?${pid}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/events?${pid}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/devices?${pid}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/browsers?${pid}${dr}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/countries?${pid}${dr}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/sources?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/events?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/devices?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/browsers?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/countries?${pid}${dr}${pp}`, { credentials: 'include' }),
           fetch(`${API_BASE}/top-pages?${pid}${dr}`, { credentials: 'include' })
         ]);
 
@@ -628,6 +635,20 @@ function DashboardScreen({ user, onLogout }) {
     };
 
     fetchData();
+  }, [selectedProjeto, dateRange, selectedPage]);
+
+  // Busca páginas disponíveis quando muda o projeto ou período
+  useEffect(() => {
+    const fetchPages = async () => {
+      if (!selectedProjeto?.google_property_id) return;
+      try {
+        const res = await fetch(`${API_BASE}/pages?propertyId=${selectedProjeto.google_property_id}&dateRange=${dateRange}`);
+        const d = await res.json();
+        if (d.success) setPages(d.data);
+      } catch { }
+    };
+    fetchPages();
+    setSelectedPage(null); // reseta filtro de página ao trocar projeto/período
   }, [selectedProjeto, dateRange]);
 
   return (
@@ -684,6 +705,50 @@ function DashboardScreen({ user, onLogout }) {
                 )}
               </div>
             )}
+            {/* Seletor de Página (slug) */}
+            <div className="date-picker" onClick={() => { setShowPageMenu(!showPageMenu); if (!showPageMenu) setPageSearch(''); }} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px', background: selectedPage ? 'rgba(99,102,241,0.12)' : undefined, borderColor: selectedPage ? 'var(--accent-color)' : undefined }}>
+              <BarChart3 size={16} color={selectedPage ? 'var(--accent-color)' : 'var(--text-secondary)'} />
+              <span style={{ color: selectedPage ? 'var(--accent-color)' : undefined, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedPage ? selectedPage.path : 'Todas as Páginas'}
+              </span>
+              {selectedPage && (
+                <span onClick={(e) => { e.stopPropagation(); setSelectedPage(null); setShowPageMenu(false); }}
+                  style={{ marginLeft: '4px', color: 'var(--text-secondary)', display: 'flex', cursor: 'pointer' }}>
+                  <X size={13} />
+                </span>
+              )}
+              <ChevronDown size={16} color="var(--text-secondary)" />
+              {showPageMenu && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '8px', zIndex: 200, width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+                  <input
+                    autoFocus
+                    placeholder="Buscar /slug..."
+                    value={pageSearch}
+                    onChange={e => setPageSearch(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '6px', outline: 'none' }}
+                  />
+                  <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                    <div onClick={() => { setSelectedPage(null); setShowPageMenu(false); }}
+                      style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: !selectedPage ? 'var(--accent-color)' : 'var(--text-secondary)', fontWeight: !selectedPage ? '600' : '400', background: !selectedPage ? 'rgba(99,102,241,0.1)' : 'transparent', marginBottom: '2px' }}>
+                      🌐 Todas as páginas
+                    </div>
+                    {pages
+                      .filter(p => p.path.toLowerCase().includes(pageSearch.toLowerCase()))
+                      .map(p => (
+                        <div key={p.path} onClick={() => { setSelectedPage(p); setShowPageMenu(false); }}
+                          style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: 'monospace', color: selectedPage?.path === p.path ? 'var(--accent-color)' : 'var(--text-primary)', background: selectedPage?.path === p.path ? 'rgba(99,102,241,0.1)' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.path}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px', flexShrink: 0 }}>{p.views.toLocaleString()}</span>
+                        </div>
+                      ))
+                    }
+                    {pages.filter(p => p.path.toLowerCase().includes(pageSearch.toLowerCase())).length === 0 && (
+                      <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Nenhuma página encontrada</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Seletor de Período */}
             <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
               <Calendar size={16} color="var(--text-secondary)" />

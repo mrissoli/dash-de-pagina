@@ -20,10 +20,14 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta-muito-segura';
 
 // Supabase (Usado APENAS no backend com Service Role Key para ignorar RLS ou validar info)
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+let supabase;
+try {
+    const supaUrl = process.env.SUPABASE_URL || 'https://example.supabase.co';
+    const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy';
+    supabase = createClient(supaUrl, supaKey);
+} catch (err) {
+    console.error("Falha ao inicializar Supabase:", err.message);
+}
 
 // GA4 Client — credenciais via GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON puro ou base64)
 let analyticsDataClient;
@@ -490,6 +494,10 @@ process.on('unhandledRejection', (reason) => {
     console.error('unhandledRejection:', reason);
 });
 
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+app.get('/', (req, res) => {
+    res.json({ status: 'A API Backend está Funcionando!', port: PORT });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor de API iniciado em http://0.0.0.0:${PORT}`);
 });

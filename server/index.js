@@ -8,11 +8,8 @@ const { BetaAnalyticsDataClient } = require('@google-analytics/data');
 const axios = require('axios');
 
 const app = express();
-// CORS: usa CORS_ORIGINS do .env (ex: "https://dash.seudominio.com") ou localhost para dev
-const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:5173', 'http://localhost:5174'];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+// CORS: reflete dinamicamente a origem (permite que a Vercel/Easypanel chamem a API com cookies)
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 

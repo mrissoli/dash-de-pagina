@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   BarChart3, Users, Clock, MousePointerClick, Activity, ChevronDown, Calendar,
   LayoutDashboard, Settings, Bell, ArrowUpRight, ArrowDownRight,
-  MonitorPlay, Flame, Mail, Lock, LogIn, Shield
+  MonitorPlay, Flame, Mail, Lock, LogIn, Shield, Smartphone, Monitor, Tablet
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { supabase } from './lib/supabase';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
 
 // --- MOCK CONSTANTS (Deletados pois a UI usará state nativo via API) ---
 // ... Constants omitidos untuk clareza, fontes e topPages continuam os demais.
@@ -423,17 +423,39 @@ function DashboardScreen({ user, onLogout }) {
 
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Sessões por Dispositivo</span></div>
-              <div style={{ height: '300px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '12px 0' }}>
                 {devicesData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={devicesData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} style={{ fontSize: '12px', fill: 'var(--text-primary)' }}>
-                        {devicesData.map((entry, i) => <Cell key={i} fill={DEVICE_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : <div style={{ color: 'var(--text-secondary)' }}>Sem dados de dispositivos.</div>}
+                  <>
+                    <div style={{ width: '100%', height: '220px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={devicesData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={5} dataKey="value" nameKey="name" stroke="none">
+                            {devicesData.map((entry, i) => <Cell key={i} fill={DEVICE_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {devicesData.map((d, i) => {
+                        const total = devicesData.reduce((s, x) => s + x.value, 0);
+                        const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0';
+                        const DevIcon = d.name === 'Mobile' ? Smartphone : d.name === 'Desktop' ? Monitor : Tablet;
+                        const color = DEVICE_COLORS[d.name] || COLORS[i % COLORS.length];
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', borderRadius: '10px', background: `${color}15`, border: `1px solid ${color}30` }}>
+                            <DevIcon size={18} color={color} />
+                            <div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{d.name}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color }}>{pct}%</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.value.toLocaleString('pt-BR')} sess.</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : <div style={{ color: 'var(--text-secondary)', padding: '40px' }}>Sem dados de dispositivos.</div>}
               </div>
             </div>
           </div>

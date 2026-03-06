@@ -491,7 +491,7 @@ function DashboardScreen({ user, onLogout }) {
   const [browsersData, setBrowsersData] = useState([]);
   const [countriesData, setCountriesData] = useState([]);
   const [topPagesData, setTopPagesData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
   const realtimeIntervalRef = useRef(null);
 
@@ -544,7 +544,10 @@ function DashboardScreen({ user, onLogout }) {
   // Buscar todos os dados com UMA única chamada ao backend (paralelo no servidor + cache 5min)
   useEffect(() => {
     const fetchData = async () => {
-      if (!selectedProjeto?.google_property_id) return;
+      if (!selectedProjeto?.google_property_id) {
+        setIsLoading(false); // Garante que o spinner não fique preso
+        return;
+      }
       try {
         setIsLoading(true);
         setDashboardError('');
@@ -687,7 +690,7 @@ function DashboardScreen({ user, onLogout }) {
                       🌐 Todas as páginas
                     </div>
                     {pages
-                      .filter(p => p.path.toLowerCase().includes(pageSearch.toLowerCase()))
+                      .filter(p => p?.path && p.path.toLowerCase().includes(pageSearch.toLowerCase()))
                       .map(p => (
                         <div key={p.path} onClick={() => { setSelectedPage(p); setShowPageMenu(false); }}
                           style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: 'monospace', color: selectedPage?.path === p.path ? 'var(--accent-color)' : 'var(--text-primary)', background: selectedPage?.path === p.path ? 'rgba(99,102,241,0.1)' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>

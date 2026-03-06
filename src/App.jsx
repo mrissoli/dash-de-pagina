@@ -495,12 +495,18 @@ function DashboardScreen({ user, onLogout }) {
   const [dashboardError, setDashboardError] = useState('');
   const realtimeIntervalRef = useRef(null);
 
+  const thisYear = new Date().getFullYear();
   const dateOptions = [
-    { label: 'Últimos 7 dias', value: '7daysAgo' },
-    { label: 'Últimos 14 dias', value: '14daysAgo' },
-    { label: 'Últimos 30 dias', value: '30daysAgo' },
-    { label: 'Últimos 90 dias', value: '90daysAgo' },
+    { label: 'Hoje', value: 'today', startDate: 'today', endDate: 'today' },
+    { label: 'Ontem', value: 'yesterday', startDate: 'yesterday', endDate: 'yesterday' },
+    { label: 'Últimos 3 dias', value: '3daysAgo', startDate: '3daysAgo', endDate: 'today' },
+    { label: 'Últimos 7 dias', value: '7daysAgo', startDate: '7daysAgo', endDate: 'today' },
+    { label: 'Últimos 14 dias', value: '14daysAgo', startDate: '14daysAgo', endDate: 'today' },
+    { label: 'Últimos 30 dias', value: '30daysAgo', startDate: '30daysAgo', endDate: 'today' },
+    { label: 'Últimos 90 dias', value: '90daysAgo', startDate: '90daysAgo', endDate: 'today' },
+    { label: `Esse ano (${thisYear})`, value: 'thisYear', startDate: `${thisYear}-01-01`, endDate: 'today' },
   ];
+  const selectedDateOption = dateOptions.find(o => o.value === dateRange) || dateOptions[3];
 
   // Carrega lista de projetos do cliente
   useEffect(() => {
@@ -552,7 +558,8 @@ function DashboardScreen({ user, onLogout }) {
         setIsLoading(true);
         setDashboardError('');
 
-        const dr = `&dateRange=${dateRange}`;
+        const { startDate, endDate } = selectedDateOption;
+        const dr = `&dateRange=${startDate}&endDate=${endDate}`;
         const pid = `propertyId=${selectedProjeto.google_property_id}`;
         const ct = `&clarityToken=${encodeURIComponent(selectedProjeto.clarity_token || '')}`;
         const pp = selectedPage ? `&pagePath=${encodeURIComponent(selectedPage.path)}` : '';
@@ -746,10 +753,10 @@ function DashboardScreen({ user, onLogout }) {
             {/* Seletor de Período */}
             <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
               <Calendar size={16} color="var(--text-secondary)" />
-              <span>{dateOptions.find(o => o.value === dateRange)?.label}</span>
+              <span>{selectedDateOption?.label}</span>
               <ChevronDown size={16} color="var(--text-secondary)" />
               {showDateMenu && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '180px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
                   {dateOptions.map(opt => (
                     <div key={opt.value} onClick={(e) => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
                       style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? '600' : '400', background: dateRange === opt.value ? 'rgba(99, 102, 241, 0.1)' : 'transparent', transition: 'all 0.15s' }}>

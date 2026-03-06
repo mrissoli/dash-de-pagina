@@ -562,6 +562,7 @@ app.get('/api/metrics', async (req, res) => {
         const propertyId = req.query.propertyId;
         const clarityToken = req.query.clarityToken;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         let gaData = { totalVisits: 0, bounceRate: 0, avgSessionDuration: '00:00', activeUsers: 0, newUsers: 0, pagesPerSession: '0' };
         let clarityData = { activeUsers: 0, avgTime: '00:00' };
 
@@ -581,7 +582,7 @@ app.get('/api/metrics', async (req, res) => {
 
             const [response] = await analyticsDataClient.runReport({
                 property: `properties/${propertyId}`,
-                dateRanges: [{ startDate, endDate: 'today' }],
+                dateRanges: [{ startDate, endDate }],
                 metrics: [
                     { name: 'sessions' },
                     { name: 'bounceRate' },
@@ -662,6 +663,7 @@ app.get('/api/traffic', async (req, res) => {
         const propertyId = req.query.propertyId;
         const clarityToken = req.query.clarityToken;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
@@ -676,7 +678,7 @@ app.get('/api/traffic', async (req, res) => {
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'date' }],
             metrics: [{ name: 'sessions' }],
             ...(dimensionFilter && { dimensionFilter }),
@@ -732,12 +734,13 @@ app.get('/api/pages', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '30daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'pagePath' }],
             metrics: [{ name: 'screenPageViews' }],
             orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
@@ -765,10 +768,11 @@ app.get('/api/top-pages', async (req, res) => {
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'pagePath' }],
             metrics: [{ name: 'screenPageViews' }, { name: 'averageSessionDuration' }],
             orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
@@ -794,12 +798,13 @@ app.get('/api/sources', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'sessionSource' }],
             metrics: [{ name: 'sessions' }],
             orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -832,12 +837,13 @@ app.get('/api/events', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'eventName' }],
             metrics: [{ name: 'eventCount' }],
             orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
@@ -862,12 +868,13 @@ app.get('/api/devices', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'deviceCategory' }],
             metrics: [{ name: 'sessions' }],
             orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -891,12 +898,13 @@ app.get('/api/browsers', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'browser' }],
             metrics: [{ name: 'sessions' }],
             orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -921,12 +929,13 @@ app.get('/api/countries', async (req, res) => {
     try {
         const propertyId = req.query.propertyId;
         const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
         if (!propertyId) return res.json({ success: false, message: 'Falta GA4_PROPERTY_ID' });
         if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'Google Analytics não configurado. Defina GOOGLE_APPLICATION_CREDENTIALS_JSON.' });
 
         const [response] = await analyticsDataClient.runReport({
             property: `properties/${propertyId}`,
-            dateRanges: [{ startDate, endDate: 'today' }],
+            dateRanges: [{ startDate, endDate }],
             dimensions: [{ name: 'country' }],
             metrics: [{ name: 'activeUsers' }, { name: 'sessions' }],
             orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],

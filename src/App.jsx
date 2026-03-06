@@ -541,51 +541,88 @@ function DashboardScreen({ user, onLogout }) {
     return () => clearInterval(realtimeIntervalRef.current);
   }, [selectedProjeto, fetchRealtime]);
 
-  // Buscar todos os dados com UMA única chamada ao backend (paralelo no servidor + cache 5min)
+  // Buscar dados reais das APIs — uma chamada por tipo de dado, todas em paralelo
   useEffect(() => {
     const fetchData = async () => {
       if (!selectedProjeto?.google_property_id) {
-        setIsLoading(false); // Garante que o spinner não fique preso
+        setIsLoading(false);
         return;
       }
       try {
         setIsLoading(true);
         setDashboardError('');
 
-        const params = new URLSearchParams({
-          propertyId: selectedProjeto.google_property_id,
-          dateRange,
-          clarityToken: selectedProjeto.clarity_token || '',
-          clarityProjectId: selectedProjeto.clarity_project_id || '',
-          ...(selectedPage ? { pagePath: selectedPage.path } : {}),
-        });
+        const dr = `&dateRange=${dateRange}`;
+        const pid = `propertyId=${selectedProjeto.google_property_id}`;
+        const ct = `&clarityToken=${encodeURIComponent(selectedProjeto.clarity_token || '')}`;
+        const pp = selectedPage ? `&pagePath=${encodeURIComponent(selectedPage.path)}` : '';
 
-        const res = await fetch(`${API_BASE}/dashboard?${params}`, { credentials: 'include' });
-        const d = await res.json();
+        const [resMetrics, resTraffic, resSources, resEvents, resDevices, resBrowsers, resCountries, resTopPages] = await Promise.all([
+          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/sources?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/events?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/devices?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/browsers?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/countries?${pid}${dr}${pp}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/top-pages?${pid}${dr}`, { credentials: 'include' }),
+        ]);
 
-        if (!d.success) {
-          setDashboardError(d.error || 'Erro ao carregar dados do dashboard.');
-          return;
+        // Métricas
+        if (resMetrics.ok) {
+          const mData = await resMetrics.json();
+          if (mData.success && mData.data) setMetrics(mData.data);
+          else if (!mData.success) setDashboardError(mData.error || mData.message || 'Erro ao carregar métricas.');
         }
 
-        setMetrics(d.metrics);
+        // Tráfego diário
+        if (resTraffic.ok) {
+          const tData = await resTraffic.json();
+          if (tData.success && tData.data) {
+            const formatted = tData.data.map(item => {
+              const d = new Date(item.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+              const shortDay = d.toLocaleDateString('pt-BR', { weekday: 'short' });
+              return { name: shortDay.charAt(0).toUpperCase() + shortDay.slice(1), analytics: item.analytics, clarity: item.clarity };
+            });
+            setTrafficData(formatted);
+          } else if (!tData.success) {
+            setDashboardError(tData.error || tData.message || 'Erro ao carregar tráfego.');
+          }
+        }
 
-        // Formata datas YYYYMMDD → dia da semana curto
-        const formattedTraffic = (d.trafficData || []).map(item => {
-          const dt = new Date(item.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
-          const shortDay = dt.toLocaleDateString('pt-BR', { weekday: 'short' });
-          return { name: shortDay.charAt(0).toUpperCase() + shortDay.slice(1), analytics: item.analytics, clarity: item.clarity };
-        });
-        setTrafficData(formattedTraffic);
-        setSourcesData(d.sourcesData || []);
-        setEventsData(d.eventsData || []);
-        setDevicesData(d.devicesData || []);
-        setBrowsersData(d.browsersData || []);
-        setCountriesData(d.countriesData || []);
-        setTopPagesData(d.topPagesData || []);
+        // Canais de origem
+        if (resSources.ok) {
+          const sData = await resSources.json();
+          if (sData.success && sData.data) setSourcesData(sData.data);
+        }
+        // Eventos
+        if (resEvents.ok) {
+          const eData = await resEvents.json();
+          if (eData.success && eData.data) setEventsData(eData.data);
+        }
+        // Dispositivos
+        if (resDevices.ok) {
+          const dData = await resDevices.json();
+          if (dData.success && dData.data) setDevicesData(dData.data);
+        }
+        // Navegadores
+        if (resBrowsers.ok) {
+          const bData = await resBrowsers.json();
+          if (bData.success && bData.data) setBrowsersData(bData.data);
+        }
+        // Países
+        if (resCountries.ok) {
+          const cData = await resCountries.json();
+          if (cData.success && cData.data) setCountriesData(cData.data);
+        }
+        // Top páginas
+        if (resTopPages.ok) {
+          const tpData = await resTopPages.json();
+          if (tpData.success && tpData.data) setTopPagesData(tpData.data);
+        }
       } catch (error) {
         console.error('Falha ao buscar dados', error);
-        setDashboardError('O servidor Backend está Offline ou inacessível.');
+        setDashboardError('O servidor Backend está Offline ou inacessível. Certifique-se de que o Servidor Node está rodando.');
       } finally {
         setIsLoading(false);
       }

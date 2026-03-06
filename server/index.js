@@ -367,6 +367,194 @@ app.get('/api/meus-projetos', requireAuth, async (req, res) => {
 });
 
 // ============================================
+// Cache em memória (5 minutos por chave)
+// ============================================
+const cache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+function getCache(key) {
+    const entry = cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > CACHE_TTL_MS) { cache.delete(key); return null; }
+    return entry.data;
+}
+function setCache(key, data) {
+    cache.set(key, { data, ts: Date.now() });
+}
+
+// Helper: cria dimensionFilter do GA4
+function makePageFilter(pagePath) {
+    if (!pagePath) return undefined;
+    return { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'EXACT', value: pagePath } } };
+}
+
+// ============================================
+// Endpoint: DASHBOARD COMPLETO (todas as queries em paralelo no servidor)
+// ============================================
+app.get('/api/dashboard', async (req, res) => {
+    try {
+        const { propertyId, dateRange = '7daysAgo', clarityToken, clarityProjectId, pagePath } = req.query;
+        if (!propertyId) return res.status(400).json({ success: false, error: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const cacheKey = `dashboard:${propertyId}:${dateRange}:${pagePath || 'all'}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, ...cached });
+
+        const prop = `properties/${propertyId}`;
+        const dateRanges = [{ startDate: dateRange, endDate: 'today' }];
+        const dimFilter = makePageFilter(pagePath);
+        const filterOpts = dimFilter ? { dimensionFilter: dimFilter } : {};
+
+        // Dispara TODAS as queries GA4 em paralelo no servidor
+        const [
+            resMetrics, resTraffic, resSources, resEvents,
+            resDevices, resBrowsers, resCountries, resTopPages
+        ] = await Promise.allSettled([
+            // 1. Métricas principais
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                metrics: [{ name: 'sessions' }, { name: 'bounceRate' }, { name: 'averageSessionDuration' }, { name: 'activeUsers' }, { name: 'newUsers' }, { name: 'screenPageViewsPerSession' }],
+                ...filterOpts,
+            }),
+            // 2. Tráfego diário
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'date' }], metrics: [{ name: 'sessions' }],
+                ...filterOpts,
+            }),
+            // 3. Canais de origem
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'sessionDefaultChannelGroup' }], metrics: [{ name: 'sessions' }],
+                orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8,
+                ...filterOpts,
+            }),
+            // 4. Eventos
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'eventName' }], metrics: [{ name: 'eventCount' }],
+                orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }], limit: 8,
+                ...filterOpts,
+            }),
+            // 5. Dispositivos
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'sessions' }],
+                ...filterOpts,
+            }),
+            // 6. Navegadores
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'browser' }], metrics: [{ name: 'sessions' }],
+                orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 6,
+                ...filterOpts,
+            }),
+            // 7. Países
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'country' }], metrics: [{ name: 'sessions' }],
+                orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8,
+                ...filterOpts,
+            }),
+            // 8. Top páginas (sempre sem filtro de página para visão global)
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'pagePath' }],
+                metrics: [{ name: 'screenPageViews' }, { name: 'averageSessionDuration' }],
+                orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: 10,
+            }),
+        ]);
+
+        // Processa métricas
+        let metrics = { totalVisitsGA: '0', bounceRateGA: '0%', avgTimeGA: '00:00', activeUsersGA: '0', newUsersGA: '0', pagesPerSessionGA: '0' };
+        if (resMetrics.status === 'fulfilled') {
+            const row = resMetrics.value[0]?.rows?.[0]?.metricValues;
+            if (row) {
+                const avgSec = Math.round(Number(row[2].value));
+                metrics = {
+                    totalVisitsGA: row[0].value,
+                    bounceRateGA: (Number(row[1].value) * 100).toFixed(1) + '%',
+                    avgTimeGA: `${String(Math.floor(avgSec / 60)).padStart(2, '0')}:${String(avgSec % 60).padStart(2, '0')}`,
+                    activeUsersGA: row[3].value,
+                    newUsersGA: row[4].value,
+                    pagesPerSessionGA: Number(row[5].value).toFixed(1),
+                    activeUsersClarity: '—',
+                };
+            }
+        }
+
+        // Processa tráfego diário
+        let trafficData = [];
+        if (resTraffic.status === 'fulfilled') {
+            trafficData = (resTraffic.value[0]?.rows || [])
+                .map(r => ({ date: r.dimensionValues[0].value, analytics: parseInt(r.metricValues[0].value, 10), clarity: 0 }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+        }
+
+        // Processa canais
+        let sourcesData = [];
+        if (resSources.status === 'fulfilled') {
+            sourcesData = (resSources.value[0]?.rows || []).map(r => ({ source: r.dimensionValues[0].value, sessions: parseInt(r.metricValues[0].value, 10) }));
+        }
+
+        // Processa eventos
+        let eventsData = [];
+        if (resEvents.status === 'fulfilled') {
+            eventsData = (resEvents.value[0]?.rows || []).map(r => ({ event: r.dimensionValues[0].value, count: parseInt(r.metricValues[0].value, 10) }));
+        }
+
+        // Processa dispositivos
+        let devicesData = [];
+        if (resDevices.status === 'fulfilled') {
+            devicesData = (resDevices.value[0]?.rows || []).map(r => ({ device: r.dimensionValues[0].value, sessions: parseInt(r.metricValues[0].value, 10) }));
+        }
+
+        // Processa navegadores
+        let browsersData = [];
+        if (resBrowsers.status === 'fulfilled') {
+            browsersData = (resBrowsers.value[0]?.rows || []).map(r => ({ browser: r.dimensionValues[0].value, sessions: parseInt(r.metricValues[0].value, 10) }));
+        }
+
+        // Processa países
+        let countriesData = [];
+        if (resCountries.status === 'fulfilled') {
+            countriesData = (resCountries.value[0]?.rows || []).map(r => ({ country: r.dimensionValues[0].value, sessions: parseInt(r.metricValues[0].value, 10) }));
+        }
+
+        // Processa top páginas
+        let topPagesData = [];
+        if (resTopPages.status === 'fulfilled') {
+            topPagesData = (resTopPages.value[0]?.rows || []).map(r => {
+                const avgSec = Math.round(Number(r.metricValues[1].value));
+                return { page: r.dimensionValues[0].value, views: parseInt(r.metricValues[0].value, 10), avgTime: `${String(Math.floor(avgSec / 60)).padStart(2, '0')}:${String(avgSec % 60).padStart(2, '0')}` };
+            });
+        }
+
+        // Clarify (opcional — não bloqueia o restante)
+        let activeUsersClarity = '—';
+        if (clarityToken) {
+            try {
+                const clarityRes = await axios.get('https://www.clarity.ms/export-data/api/v1/project-live-insights', {
+                    params: { numOfDays: 3 }, headers: { Authorization: `Bearer ${clarityToken}` }, timeout: 4000
+                });
+                const cData = clarityRes.data;
+                if (cData?.trafficCount !== undefined) activeUsersClarity = String(cData.trafficCount);
+                else if (Array.isArray(cData)) activeUsersClarity = String(cData.reduce((s, r) => s + (r.trafficCount || 0), 0));
+                metrics.activeUsersClarity = activeUsersClarity;
+            } catch { /* Clarity opcional */ }
+        }
+
+        const result = { metrics, trafficData, sourcesData, eventsData, devicesData, browsersData, countriesData, topPagesData };
+        setCache(cacheKey, result);
+
+        res.json({ success: true, cached: false, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
 // Endpoint: Resumo de Métricas Principais
 // ============================================
 app.get('/api/metrics', async (req, res) => {

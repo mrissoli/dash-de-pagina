@@ -69,6 +69,67 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+// Heatmap Semanal do Umami
+const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const UmamiWeeklyHeatmap = ({ data }) => {
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de heatmap semanal.</div>;
+  }
+  // data format: [{ x: hour, y: day, v: count }] or {0: {0: v, ...}, ...}
+  const matrix = Array.from({ length: 7 }, () => Array(24).fill(0));
+  let maxVal = 1;
+  if (Array.isArray(data)) {
+    data.forEach(item => {
+      const d = item.day ?? item.y ?? 0;
+      const h = item.hour ?? item.x ?? 0;
+      const v = item.v ?? item.count ?? item.sessions ?? 0;
+      if (d < 7 && h < 24) { matrix[d][h] = v; if (v > maxVal) maxVal = v; }
+    });
+  } else if (typeof data === 'object') {
+    Object.keys(data).forEach(d => {
+      Object.keys(data[d] || {}).forEach(h => {
+        const v = data[d][h] || 0;
+        matrix[parseInt(d)][parseInt(h)] = v;
+        if (v > maxVal) maxVal = v;
+      });
+    });
+  }
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '36px repeat(24, 1fr)', gap: '2px', minWidth: '600px' }}>
+        {/* Header horas */}
+        <div />
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} style={{ textAlign: 'center', fontSize: '9px', color: 'var(--text-secondary)', paddingBottom: '4px' }}>{h}h</div>
+        ))}
+        {/* Linhas por dia */}
+        {DAYS_PT.map((day, d) => (
+          <React.Fragment key={d}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', paddingRight: '6px' }}>{day}</div>
+            {Array.from({ length: 24 }, (_, h) => {
+              const v = matrix[d][h];
+              const intensity = maxVal > 0 ? v / maxVal : 0;
+              const bg = intensity === 0 ? 'rgba(255,255,255,0.04)' : `rgba(99,102,241,${(0.15 + intensity * 0.85).toFixed(2)})`;
+              return (
+                <div key={h} title={`${day} ${h}h: ${v} sessões`}
+                  style={{ height: '20px', borderRadius: '3px', background: bg, cursor: 'default', transition: 'background 0.2s' }}
+                />
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+        <span>Menos</span>
+        {[0.04, 0.25, 0.5, 0.75, 1].map((v, i) => (
+          <div key={i} style={{ width: '16px', height: '16px', borderRadius: '3px', background: v === 0.04 ? 'rgba(255,255,255,0.04)' : `rgba(99,102,241,${v.toFixed(2)})` }} />
+        ))}
+        <span>Mais</span>
+      </div>
+    </div>
+  );
+};
+
 // --- SCREENS ---
 function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -506,6 +567,22 @@ function DashboardScreen({ user, onLogout }) {
   // URL base do cliente p/ PageSpeed (configurável)
   const [pageSpeedUrl, setPageSpeedUrl] = useState('');
 
+  // ===== Umami states =====
+  const [umamiConfigured, setUmamiConfigured] = useState(false);
+  const [umamiWebsites, setUmamiWebsites] = useState([]);
+  const [selectedUmamiWebsite, setSelectedUmamiWebsite] = useState(null);
+  const [umamiKpis, setUmamiKpis] = useState(null);
+  const [umamiTimeseries, setUmamiTimeseries] = useState({ pageviews: [], sessions: [] });
+  const [umamiReferrers, setUmamiReferrers] = useState([]);
+  const [umamiDevices, setUmamiDevices] = useState([]);
+  const [umamiTopUrls, setUmamiTopUrls] = useState([]);
+  const [umamiCountries, setUmamiCountries] = useState([]);
+  const [umamiLeadEvents, setUmamiLeadEvents] = useState([]);
+  const [umamiWeekly, setUmamiWeekly] = useState(null);
+  const [umamiHourly, setUmamiHourly] = useState([]);
+  const [umamiLoading, setUmamiLoading] = useState(false);
+  const [showUmamiWebsiteMenu, setShowUmamiWebsiteMenu] = useState(false);
+
   const thisYear = new Date().getFullYear();
   const dateOptions = [
     { label: 'Hoje', value: 'today', startDate: 'today', endDate: 'today' },
@@ -655,6 +732,86 @@ function DashboardScreen({ user, onLogout }) {
     fetchData();
   }, [selectedProjeto, dateRange, selectedPage]);
 
+  // ===== Fetch Umami Config + Websites =====
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/umami/config`);
+        const cfg = await res.json();
+        setUmamiConfigured(cfg.configured);
+        if (cfg.configured) {
+          const wRes = await fetch(`${API_BASE}/umami/websites`);
+          const wData = await wRes.json();
+          if (wData.success && wData.data?.length > 0) {
+            setUmamiWebsites(wData.data);
+            setSelectedUmamiWebsite(wData.data[0]);
+          }
+        }
+      } catch { }
+    };
+    init();
+  }, []);
+
+  // ===== Fetch Umami Dashboard Data =====
+  useEffect(() => {
+    if (!selectedUmamiWebsite?.id) return;
+    const fetchUmami = async () => {
+      setUmamiLoading(true);
+      try {
+        const { startDate, endDate } = selectedDateOption;
+        const qs = `websiteId=${selectedUmamiWebsite.id}&dateRange=${startDate}&endDate=${endDate}`;
+        const [dashRes, hourRes, weeklyRes] = await Promise.all([
+          fetch(`${API_BASE}/umami/dashboard?${qs}`),
+          fetch(`${API_BASE}/umami/pageviews?${qs}&unit=hour`),
+          fetch(`${API_BASE}/umami/weekly?websiteId=${selectedUmamiWebsite.id}`),
+        ]);
+        if (dashRes.ok) {
+          const d = await dashRes.json();
+          if (d.success) {
+            setUmamiKpis(d.kpis);
+            // Timeseries — merge pageviews e sessions por data
+            const pvMap = {};
+            (d.pageviewsTimeseries?.pageviews || []).forEach(p => { pvMap[p.t] = { date: p.t, pageviews: p.y, sessions: 0 }; });
+            (d.pageviewsTimeseries?.sessions || []).forEach(s => { if (pvMap[s.t]) pvMap[s.t].sessions = s.y; else pvMap[s.t] = { date: s.t, pageviews: 0, sessions: s.y }; });
+            const ts = Object.values(pvMap).sort((a, b) => a.date.localeCompare(b.date)).map(item => {
+              const d = new Date(item.date);
+              return { ...item, name: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) };
+            });
+            setUmamiTimeseries(ts);
+            setUmamiReferrers(d.referrers || []);
+            setUmamiDevices(d.devices || []);
+            setUmamiTopUrls(d.topUrls || []);
+            setUmamiCountries(d.countries || []);
+            setUmamiLeadEvents(d.leadEvents || []);
+          }
+        }
+        if (hourRes.ok) {
+          const h = await hourRes.json();
+          if (h.success && h.data) {
+            const hourMap = {};
+            (h.data.pageviews || []).forEach(p => {
+              const hr = new Date(p.t).getHours();
+              if (!hourMap[hr]) hourMap[hr] = { hour: `${String(hr).padStart(2, '0')}h`, pageviews: 0, sessions: 0 };
+              hourMap[hr].pageviews += p.y;
+            });
+            (h.data.sessions || []).forEach(s => {
+              const hr = new Date(s.t).getHours();
+              if (!hourMap[hr]) hourMap[hr] = { hour: `${String(hr).padStart(2, '0')}h`, pageviews: 0, sessions: 0 };
+              hourMap[hr].sessions += s.y;
+            });
+            setUmamiHourly(Array.from({ length: 24 }, (_, i) => hourMap[i] || { hour: `${String(i).padStart(2, '0')}h`, pageviews: 0, sessions: 0 }));
+          }
+        }
+        if (weeklyRes.ok) {
+          const w = await weeklyRes.json();
+          if (w.success) setUmamiWeekly(w.data);
+        }
+      } catch (e) { console.warn('Umami fetch error:', e.message); }
+      finally { setUmamiLoading(false); }
+    };
+    fetchUmami();
+  }, [selectedUmamiWebsite, dateRange]);
+
   // PageSpeed — carrega quando o projeto muda (URL separada)
   useEffect(() => {
     const fetchPageSpeed = async () => {
@@ -690,7 +847,10 @@ function DashboardScreen({ user, onLogout }) {
         <div className="nav-menu">
           <div className="nav-section-title">Principal</div>
           <div className={`nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveNav('dashboard')}><LayoutDashboard size={18} /> Resumo</div>
-          <div className={`nav-item ${activeNav === 'analytics' ? 'active' : ''}`} onClick={() => setActiveNav('analytics')}><BarChart3 size={18} /> Analytics Base</div>
+          <div className={`nav-item ${activeNav === 'analytics' ? 'active' : ''}`} onClick={() => setActiveNav('analytics')}>
+            <BarChart3 size={18} /> Analytics Base
+            {umamiConfigured && <span style={{ marginLeft: 'auto', fontSize: '9px', padding: '2px 6px', background: 'rgba(16,185,129,0.2)', color: '#10b981', borderRadius: '10px', fontWeight: 700 }}>Umami</span>}
+          </div>
           <div className={`nav-item ${activeNav === 'clarity' ? 'active' : ''}`} onClick={() => setActiveNav('clarity')}><MonitorPlay size={18} /> Mapas de Calor</div>
           {isAdmin && (
             <>
@@ -712,7 +872,7 @@ function DashboardScreen({ user, onLogout }) {
       </aside>
       {activeNav === 'admin' && isAdmin && <main className="main-content"><AdminPanel user={user} /></main>}
 
-      {(activeNav === 'dashboard' || activeNav === 'analytics') && <main className="main-content">
+      {activeNav === 'dashboard' && <main className="main-content">
         <header className="header">
           <div className="header-title">
             <h1>{selectedProjeto?.nome || 'Visão Geral da Conta'}</h1>
@@ -1212,6 +1372,296 @@ function DashboardScreen({ user, onLogout }) {
           </div>
 
         </div>
+      </main>}
+
+      {/* ===== ABA: ANALYTICS BASE (UMAMI) ===== */}
+      {activeNav === 'analytics' && <main className="main-content">
+        <header className="header">
+          <div className="header-title">
+            <h1>Analytics Base</h1>
+            <p>{umamiConfigured ? `Dados precisos via Umami — sem sampling, sem ad blockers` : 'Configure o Umami para ver dados detalhados'}</p>
+          </div>
+          <div className="header-actions">
+            {umamiConfigured && umamiWebsites.length > 0 && (
+              <div className="date-picker" onClick={() => setShowUmamiWebsiteMenu(!showUmamiWebsiteMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px' }}>
+                <BarChart3 size={16} color="#10b981" />
+                <span style={{ color: '#10b981' }}>{selectedUmamiWebsite?.name || 'Website'}</span>
+                <ChevronDown size={16} color="var(--text-secondary)" />
+                {showUmamiWebsiteMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '220px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                    {umamiWebsites.map(w => (
+                      <div key={w.id} onClick={e => { e.stopPropagation(); setSelectedUmamiWebsite(w); setShowUmamiWebsiteMenu(false); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: selectedUmamiWebsite?.id === w.id ? '#10b981' : 'var(--text-primary)', fontWeight: selectedUmamiWebsite?.id === w.id ? 700 : 400, background: selectedUmamiWebsite?.id === w.id ? 'rgba(16,185,129,0.1)' : 'transparent' }}>
+                        🌐 {w.name} <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>({w.domain})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
+              <Calendar size={16} color="var(--text-secondary)" />
+              <span>{selectedDateOption?.label}</span>
+              <ChevronDown size={16} color="var(--text-secondary)" />
+              {showDateMenu && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                  {dateOptions.map(opt => (
+                    <div key={opt.value} onClick={e => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
+                      style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? 700 : 400, background: dateRange === opt.value ? 'rgba(99,102,241,0.1)' : 'transparent' }}>
+                      {opt.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {!umamiConfigured ? (
+          <div className="dashboard">
+            <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
+              <div style={{ fontSize: '52px', marginBottom: '16px' }}>📊</div>
+              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Umami não configurado</div>
+              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
+                Preencha <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_URL</code>, <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_USERNAME</code> e <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_PASSWORD</code> no arquivo <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>server/.env</code>.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', maxWidth: '680px', margin: '0 auto' }}>
+                {[
+                  { icon: '🚫', title: 'Sem ad blockers', desc: 'Não é bloqueado por extensões de privacidade' },
+                  { icon: '🍪', title: 'Sem cookies', desc: 'Compliance com LGPD — sem consent banner' },
+                  { icon: '📈', title: 'Sem sampling', desc: '100% dos dados reais, sem amostragem' },
+                  { icon: '🔒', title: 'Self-hosted', desc: 'Seus dados no seu servidor' },
+                ].map((f, i) => (
+                  <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '12px', padding: '16px', border: '1px solid var(--surface-border)', textAlign: 'left' }}>
+                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>{f.icon}</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{f.title}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{f.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="dashboard">
+            {/* KPI Cards */}
+            <div className="metrics-grid">
+              {umamiLoading ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="glass-card metric-card" style={{ opacity: 0.4 }}>
+                  <div className="metric-header"><span className="metric-title">Carregando...</span></div>
+                  <span className="metric-value">—</span>
+                </div>
+              )) : umamiKpis ? (
+                <>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Visitantes Únicos</span><div className="metric-icon icon-blue"><Users size={20} /></div></div>
+                    <span className="metric-value">{umamiKpis.visitors?.toLocaleString('pt-BR')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                      {parseFloat(umamiKpis.visitorsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                      <span style={{ color: parseFloat(umamiKpis.visitorsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitorsChange}%</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                    </div>
+                  </div>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Total de Sessões</span><div className="metric-icon icon-purple"><Activity size={20} /></div></div>
+                    <span className="metric-value">{umamiKpis.visits?.toLocaleString('pt-BR')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                      {parseFloat(umamiKpis.visitsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                      <span style={{ color: parseFloat(umamiKpis.visitsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitsChange}%</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                    </div>
+                  </div>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Total de Leads</span><div className="metric-icon icon-green"><TrendingUp size={20} /></div></div>
+                    <span className="metric-value" style={{ color: '#10b981' }}>{umamiKpis.totalLeads?.toLocaleString('pt-BR')}</span>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Eventos com "lead" no nome</div>
+                  </div>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Taxa de Conversão</span><div className="metric-icon icon-orange"><Gauge size={20} /></div></div>
+                    <span className="metric-value" style={{ color: '#f59e0b' }}>{umamiKpis.convRate}</span>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Leads / Visitantes Únicos</div>
+                  </div>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Tempo Médio</span><div className="metric-icon icon-purple"><Clock size={20} /></div></div>
+                    <span className="metric-value">{umamiKpis.avgTime}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                      {parseFloat(umamiKpis.avgTimeChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                      <span style={{ color: parseFloat(umamiKpis.avgTimeChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.avgTimeChange}%</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                    </div>
+                  </div>
+                  <div className="glass-card metric-card">
+                    <div className="metric-header"><span className="metric-title">Pageviews</span><div className="metric-icon icon-blue"><BarChart3 size={20} /></div></div>
+                    <span className="metric-value">{umamiKpis.pageviews?.toLocaleString('pt-BR')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                      {parseFloat(umamiKpis.pageviewsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                      <span style={{ color: parseFloat(umamiKpis.pageviewsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.pageviewsChange}%</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Timeseries + Referrers */}
+            <div className="charts-grid">
+              <div className="glass-card">
+                <div className="card-title-row"><span className="card-title">Sessões vs Pageviews (Umami)</span></div>
+                <div style={{ height: '280px' }}>
+                  {Array.isArray(umamiTimeseries) && umamiTimeseries.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={umamiTimeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="gPVU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
+                          <linearGradient id="gSsU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                        <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area type="monotone" dataKey="pageviews" name="Pageviews" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#gPVU)" />
+                        <Area type="monotone" dataKey="sessions" name="Sessões" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gSsU)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                </div>
+              </div>
+              <div className="glass-card">
+                <div className="card-title-row"><span className="card-title">Canais de Origem (Referrers)</span></div>
+                <div style={{ height: '280px' }}>
+                  {umamiReferrers.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={umamiReferrers.slice(0, 8).map(r => ({ name: r.x || '(direct)', value: r.y }))} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                        <Bar dataKey="value" name="Sessões" radius={[0, 4, 4, 0]} barSize={18}>
+                          {umamiReferrers.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Distribuição Horária + Dispositivos */}
+            <div className="charts-grid">
+              <div className="glass-card">
+                <div className="card-title-row"><span className="card-title">Distribuição por Hora do Dia</span></div>
+                <div style={{ height: '260px' }}>
+                  {umamiHourly.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={umamiHourly} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                        <XAxis dataKey="hour" stroke="var(--text-secondary)" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={2} />
+                        <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                        <Bar dataKey="pageviews" name="Pageviews" radius={[3, 3, 0, 0]} barSize={13}>
+                          {umamiHourly.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados horários.</div>}
+                </div>
+              </div>
+              <div className="glass-card">
+                <div className="card-title-row"><span className="card-title">Sessões por Dispositivo</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '8px 0' }}>
+                  {umamiDevices.length > 0 ? (() => {
+                    const total = umamiDevices.reduce((s, d) => s + (d.y || 0), 0);
+                    return umamiDevices.map((d, i) => {
+                      const pct = total > 0 ? ((d.y / total) * 100).toFixed(1) : 0;
+                      const DevIcon = d.x === 'mobile' ? Smartphone : d.x === 'desktop' ? Monitor : Tablet;
+                      const color = COLORS[i % COLORS.length];
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <DevIcon size={18} color={color} style={{ flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'capitalize' }}>{d.x}</span>
+                              <span style={{ fontSize: '13px', color }}>{d.y?.toLocaleString('pt-BR')} <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>({pct}%)</span></span>
+                            </div>
+                            <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Ranking de Páginas */}
+            <div className="glass-card" style={{ margin: 0 }}>
+              <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
+              <div style={{ overflowX: 'auto' }}>
+                {umamiTopUrls.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                        {['URL', 'PAGEVIEWS', 'CONVERSÕES'].map(h => <th key={h} style={{ textAlign: h === 'URL' ? 'left' : 'right', padding: '12px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {umamiTopUrls.map((url, i) => {
+                        const leadsForUrl = umamiLeadEvents.filter(e => e.urlPath === url.x).length;
+                        const convUrl = url.y > 0 ? ((leadsForUrl / url.y) * 100).toFixed(1) + '%' : '—';
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '10px 8px', fontSize: '12px', fontFamily: 'monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <div style={{ marginBottom: '4px' }}>{url.x}</div>
+                              <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.12)' }}>
+                                <div style={{ height: '100%', width: `${((url.y / (umamiTopUrls[0]?.y || 1)) * 100).toFixed(0)}%`, background: '#6366f1', borderRadius: '2px' }} />
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '14px', fontWeight: 700 }}>{url.y?.toLocaleString('pt-BR')}</td>
+                            <td style={{ textAlign: 'right', padding: '10px 8px' }}>
+                              {leadsForUrl > 0 ? <span style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{leadsForUrl} ({convUrl})</span>
+                                : <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de páginas.</div>}
+              </div>
+            </div>
+
+            {/* Heatmap Semanal */}
+            {umamiWeekly && (
+              <div className="glass-card" style={{ margin: 0 }}>
+                <div className="card-title-row"><span className="card-title">Heatmap Semanal de Atividade</span></div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Intensidade de sessões por hora e dia da semana</div>
+                <UmamiWeeklyHeatmap data={umamiWeekly} />
+              </div>
+            )}
+
+            {/* Países */}
+            {umamiCountries.length > 0 && (
+              <div className="glass-card" style={{ margin: 0 }}>
+                <div className="card-title-row"><span className="card-title">Usuários por País</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {umamiCountries.slice(0, 10).map((c, i) => {
+                    const pct = umamiCountries[0]?.y > 0 ? ((c.y / umamiCountries[0].y) * 100).toFixed(0) : 0;
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', minWidth: '30px' }}>{c.x}</span>
+                        <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: COLORS[i % COLORS.length], borderRadius: '3px' }} />
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 700, minWidth: '50px', textAlign: 'right' }}>{c.y?.toLocaleString('pt-BR')}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>}
 
       {/* ===== ABA: MAPAS DE CALOR (CLARITY) ===== */}

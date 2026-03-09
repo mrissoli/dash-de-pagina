@@ -61,6 +61,73 @@ try {
 }
 
 // ============================================
+// UMAMI — Serviço de autenticação automática
+// ============================================
+const UMAMI_URL = (process.env.UMAMI_URL || '').replace(/\/$/, '');
+const UMAMI_USERNAME = process.env.UMAMI_USERNAME || 'admin';
+const UMAMI_PASSWORD = process.env.UMAMI_PASSWORD || '';
+
+let umamiToken = null;
+let umamiTokenExpiry = 0; // timestamp em ms
+
+async function getUmamiToken() {
+    if (umamiToken && Date.now() < umamiTokenExpiry) return umamiToken;
+    if (!UMAMI_URL || !UMAMI_PASSWORD) {
+        console.warn('⚠️  UMAMI_URL ou UMAMI_PASSWORD não configurados.');
+        return null;
+    }
+    try {
+        const res = await axios.post(`${UMAMI_URL}/api/auth/login`, {
+            username: UMAMI_USERNAME,
+            password: UMAMI_PASSWORD,
+        }, { timeout: 8000 });
+        umamiToken = res.data?.token;
+        umamiTokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // renova a cada 23h
+        console.log('✅ Umami token obtido com sucesso.');
+        return umamiToken;
+    } catch (err) {
+        console.error('❌ Falha ao autenticar no Umami:', err.response?.data || err.message);
+        umamiToken = null;
+        return null;
+    }
+}
+
+async function umamiRequest(path, params = {}) {
+    const token = await getUmamiToken();
+    if (!token) throw new Error('Umami não está configurado ou autenticado.');
+    const res = await axios.get(`${UMAMI_URL}${path}`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 12000,
+    });
+    return res.data;
+}
+
+// Helper: converte dateRange (string) para startAt/endAt em ms UTC-3
+function getUmamiDateRange(dateRange, endDate) {
+    const now = new Date();
+    let start, end;
+    end = endDate === 'today' || !endDate ? now : new Date(endDate + 'T23:59:59-03:00');
+    if (dateRange === 'today') {
+        start = new Date(); start.setHours(0, 0, 0, 0);
+    } else if (dateRange === 'yesterday') {
+        start = new Date(); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
+        end = new Date(); end.setDate(end.getDate() - 1); end.setHours(23, 59, 59, 999);
+    } else {
+        // formato: '7daysAgo', '30daysAgo', etc.
+        const match = String(dateRange).match(/^(\d+)daysAgo$/);
+        const days = match ? parseInt(match[1], 10) : 7;
+        start = new Date(); start.setDate(start.getDate() - days); start.setHours(0, 0, 0, 0);
+    }
+    return { startAt: start.getTime(), endAt: end.getTime() };
+}
+
+if (UMAMI_URL && UMAMI_PASSWORD) {
+    getUmamiToken().catch(() => { });
+    console.log(`Umami configurado em: ${UMAMI_URL}`);
+}
+
+// ============================================
 // MIDDLEWARE: Verifica Autenticação e injeta perfil "PropertyID"
 // ============================================
 const requireAuth = (req, res, next) => {
@@ -1306,7 +1373,287 @@ app.get('/api/scroll-funnel', async (req, res) => {
     }
 });
 
+// ============================================================
+// UMAMI — Proxy de endpoints (todas as chamadas via servidor)
+// ============================================================
+
+// Verifica se Umami está configurado
+app.get('/api/umami/config', (req, res) => {
+    res.json({ configured: !!(UMAMI_URL && UMAMI_PASSWORD), url: UMAMI_URL || null });
+});
+
+// Lista websites cadastrados no Umami
+app.get('/api/umami/websites', async (req, res) => {
+    try {
+        const data = await umamiRequest('/api/websites', { pageSize: 50 });
+        res.json({ success: true, data: data?.data || data || [] });
+    } catch (err) {
+        res.json({ success: false, error: err.message, data: [] });
+    }
+});
+
+// KPIs gerais (stats) + período anterior para variação %
+app.get('/api/umami/stats', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        // Período anterior (mesma duração)
+        const duration = endAt - startAt;
+        const prevStart = startAt - duration;
+        const prevEnd = startAt - 1;
+        const cacheKey = `umami:stats:${websiteId}:${startAt}:${endAt}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, data: cached });
+        const [current, prev] = await Promise.all([
+            umamiRequest(`/api/websites/${websiteId}/stats`, { startAt, endAt }),
+            umamiRequest(`/api/websites/${websiteId}/stats`, { startAt: prevStart, endAt: prevEnd }),
+        ]);
+        // Calcular variações %
+        const calcChange = (cur, prv) => prv > 0 ? (((cur - prv) / prv) * 100).toFixed(1) : '0';
+        const avgTime = current.visits?.value > 0
+            ? Math.round((current.totaltime?.value || 0) / current.visits.value)
+            : 0;
+        const avgTimePrev = prev.visits?.value > 0
+            ? Math.round((prev.totaltime?.value || 0) / prev.visits.value)
+            : 0;
+        const bounceRate = current.visits?.value > 0
+            ? ((current.bounces?.value || 0) / current.visits.value * 100).toFixed(1) + '%'
+            : '0%';
+        const result = {
+            visitors: current.visitors?.value || 0,
+            visitorsChange: calcChange(current.visitors?.value || 0, prev.visitors?.value || 0),
+            visits: current.visits?.value || 0,
+            visitsChange: calcChange(current.visits?.value || 0, prev.visits?.value || 0),
+            pageviews: current.pageviews?.value || 0,
+            pageviewsChange: calcChange(current.pageviews?.value || 0, prev.pageviews?.value || 0),
+            bounceRate,
+            avgTime: `${String(Math.floor(avgTime / 60)).padStart(2, '0')}:${String(avgTime % 60).padStart(2, '0')}`,
+            avgTimeChange: calcChange(avgTime, avgTimePrev),
+            bounces: current.bounces?.value || 0,
+            totaltime: current.totaltime?.value || 0,
+        };
+        setCache(cacheKey, result);
+        res.json({ success: true, data: result });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Realtime — últimos 30min
+app.get('/api/umami/realtime', async (req, res) => {
+    try {
+        const { websiteId } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const data = await umamiRequest(`/api/realtime/${websiteId}`);
+        // Contar usuários únicos nos últimos 5 min
+        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        const activeNow = data?.events
+            ? [...new Set(data.events
+                .filter(e => new Date(e.createdAt).getTime() > fiveMinAgo)
+                .map(e => e.sessionId))].length
+            : 0;
+        res.json({ success: true, activeNow, series: data?.series || {}, countries: data?.countries || {}, urls: data?.urls || {} });
+    } catch (err) {
+        res.json({ success: false, error: err.message, activeNow: 0 });
+    }
+});
+
+// Pageviews temporais (sessions + pageviews por dia/hora)
+app.get('/api/umami/pageviews', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate, unit = 'day' } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const cacheKey = `umami:pv:${websiteId}:${startAt}:${endAt}:${unit}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, data: cached });
+        const data = await umamiRequest(`/api/websites/${websiteId}/pageviews`, { startAt, endAt, unit, timezone: 'America/Sao_Paulo' });
+        setCache(cacheKey, data);
+        res.json({ success: true, data });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Eventos (leads e outros) — temporal ou total
+app.get('/api/umami/events', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate, unit, eventName } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const cacheKey = `umami:ev:${websiteId}:${startAt}:${endAt}:${unit || 'total'}:${eventName || 'all'}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, data: cached });
+        const params = { startAt, endAt };
+        if (unit) params.unit = unit;
+        if (unit) params.timezone = 'America/Sao_Paulo';
+        const data = await umamiRequest(`/api/websites/${websiteId}/events`, params);
+        // Filtrar por nome de evento se solicitado
+        let result = data?.data || data || [];
+        if (eventName && Array.isArray(result)) {
+            result = result.filter(e => e.eventName && e.eventName.toLowerCase().includes(eventName.toLowerCase()));
+        }
+        // Total de leads (filtra por 'lead')
+        let leadTotal = 0;
+        if (Array.isArray(result)) {
+            const leadEvents = result.filter(e => e.eventName && e.eventName.toLowerCase().includes('lead'));
+            leadTotal = leadEvents.length;
+        }
+        setCache(cacheKey, { events: result, leadTotal });
+        res.json({ success: true, data: { events: result, leadTotal } });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Métricas por tipo (referrer, device, url, country, browser, query, etc.)
+app.get('/api/umami/metrics', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate, type = 'url', limit = 20 } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const cacheKey = `umami:metrics:${websiteId}:${startAt}:${endAt}:${type}:${limit}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, data: cached });
+        const data = await umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type, limit: parseInt(limit) });
+        const result = Array.isArray(data) ? data : [];
+        setCache(cacheKey, result);
+        res.json({ success: true, data: result });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Sessões (lista + stats)
+app.get('/api/umami/sessions', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate, page = 1, pageSize = 20 } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const [sessionsData, statsData] = await Promise.all([
+            umamiRequest(`/api/websites/${websiteId}/sessions`, { startAt, endAt, page, pageSize }),
+            umamiRequest(`/api/websites/${websiteId}/sessions/stats`, { startAt, endAt }),
+        ]);
+        res.json({ success: true, sessions: sessionsData, stats: statsData });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Sessões semanais (heatmap)
+app.get('/api/umami/weekly', async (req, res) => {
+    try {
+        const { websiteId } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const cacheKey = `umami:weekly:${websiteId}`;
+        const cached = getCache(cacheKey);
+        if (cached) return res.json({ success: true, cached: true, data: cached });
+        const data = await umamiRequest(`/api/websites/${websiteId}/sessions/weekly`);
+        setCache(cacheKey, data);
+        res.json({ success: true, data });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Event data (propriedades customizadas dos eventos de lead)
+app.get('/api/umami/event-data', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate, subType = 'properties' } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const validTypes = ['events', 'fields', 'properties', 'values', 'stats'];
+        const t = validTypes.includes(subType) ? subType : 'properties';
+        const data = await umamiRequest(`/api/websites/${websiteId}/event-data/${t}`, { startAt, endAt });
+        res.json({ success: true, data });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Dados consolidados para o dashboard Umami (uma requisição, múltiplos dados)
+app.get('/api/umami/dashboard', async (req, res) => {
+    try {
+        const { websiteId, dateRange = '7daysAgo', endDate } = req.query;
+        if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
+        const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
+        const duration = endAt - startAt;
+        const prevStart = startAt - duration;
+        const prevEnd = startAt - 1;
+
+        const [stats, prevStats, pageviews, events, referrers, devices, urls, countries] = await Promise.allSettled([
+            umamiRequest(`/api/websites/${websiteId}/stats`, { startAt, endAt }),
+            umamiRequest(`/api/websites/${websiteId}/stats`, { startAt: prevStart, endAt: prevEnd }),
+            umamiRequest(`/api/websites/${websiteId}/pageviews`, { startAt, endAt, unit: 'day', timezone: 'America/Sao_Paulo' }),
+            umamiRequest(`/api/websites/${websiteId}/events`, { startAt, endAt }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'referrer', limit: 10 }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'device', limit: 10 }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'url', limit: 20 }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'country', limit: 15 }),
+        ]);
+
+        const cur = stats.status === 'fulfilled' ? stats.value : {};
+        const prv = prevStats.status === 'fulfilled' ? prevStats.value : {};
+        const calcChange = (a, b) => b > 0 ? (((a - b) / b) * 100).toFixed(1) : '0';
+
+        const avgTime = cur.visits?.value > 0 ? Math.round((cur.totaltime?.value || 0) / cur.visits.value) : 0;
+        const avgTimePrev = prv.visits?.value > 0 ? Math.round((prv.totaltime?.value || 0) / prv.visits.value) : 0;
+        const bounceRate = cur.visits?.value > 0 ? ((cur.bounces?.value || 0) / cur.visits.value * 100).toFixed(1) + '%' : '0%';
+
+        // Contar leads nos eventos
+        let allEvents = [];
+        if (events.status === 'fulfilled') {
+            const evData = events.value;
+            allEvents = evData?.data || evData || (Array.isArray(evData) ? evData : []);
+        }
+        const leadEvents = allEvents.filter(e => e.eventName && e.eventName.toLowerCase().includes('lead'));
+        const totalLeads = leadEvents.length;
+        const leadsChange = '0'; // prev leva tempo, simplificamos aqui
+        const visitors = cur.visitors?.value || 0;
+        const convRate = visitors > 0 ? ((totalLeads / visitors) * 100).toFixed(2) + '%' : '0%';
+
+        // Pageviews timeseries
+        const pvData = pageviews.status === 'fulfilled' ? pageviews.value : {};
+
+        // Referrers
+        const referrersData = referrers.status === 'fulfilled' ? (Array.isArray(referrers.value) ? referrers.value : []) : [];
+
+        // Devices
+        const devicesData = devices.status === 'fulfilled' ? (Array.isArray(devices.value) ? devices.value : []) : [];
+
+        // URLs/Páginas
+        const urlsData = urls.status === 'fulfilled' ? (Array.isArray(urls.value) ? urls.value : []) : [];
+
+        // Países
+        const countriesData = countries.status === 'fulfilled' ? (Array.isArray(countries.value) ? countries.value : []) : [];
+
+        res.json({
+            success: true,
+            kpis: {
+                visitors, visitorsChange: calcChange(visitors, prv.visitors?.value || 0),
+                visits: cur.visits?.value || 0, visitsChange: calcChange(cur.visits?.value || 0, prv.visits?.value || 0),
+                pageviews: cur.pageviews?.value || 0, pageviewsChange: calcChange(cur.pageviews?.value || 0, prv.pageviews?.value || 0),
+                totalLeads, leadsChange,
+                convRate,
+                bounceRate,
+                avgTime: `${String(Math.floor(avgTime / 60)).padStart(2, '0')}:${String(avgTime % 60).padStart(2, '0')}`,
+                avgTimeChange: calcChange(avgTime, avgTimePrev),
+            },
+            pageviewsTimeseries: pvData,
+            referrers: referrersData,
+            devices: devicesData,
+            topUrls: urlsData,
+            countries: countriesData,
+            leadEvents: leadEvents.slice(0, 100),
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.get('/api/health', (req, res) => {
+
     res.json({
         status: 'ok',
         ga4Client: analyticsDataClient ? 'ready' : 'not initialized',

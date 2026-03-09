@@ -348,7 +348,7 @@ app.get('/api/admin/projetos', requireAdmin, async (req, res) => {
         const { clienteId } = req.query;
         let query = supabaseAdmin
             .from('projetos')
-            .select('id, nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo')
+            .select('id, nome, google_property_id, clarity_project_id, clarity_token, umami_website_id, cliente_id, ativo')
             .order('nome');
         if (clienteId) query = query.eq('cliente_id', clienteId);
 
@@ -365,13 +365,13 @@ app.get('/api/admin/projetos', requireAdmin, async (req, res) => {
 // ============================================
 app.post('/api/admin/projetos', requireAdmin, async (req, res) => {
     try {
-        const { nome, google_property_id, clarity_project_id, clarity_token, cliente_id } = req.body;
+        const { nome, google_property_id, clarity_project_id, clarity_token, umami_website_id, cliente_id } = req.body;
         if (!nome || !google_property_id || !cliente_id) {
             return res.status(400).json({ success: false, error: 'Campos obrigatórios: nome, google_property_id, cliente_id' });
         }
         const { data, error } = await supabaseAdmin
             .from('projetos')
-            .insert([{ nome, google_property_id, clarity_project_id, clarity_token, cliente_id, ativo: true }])
+            .insert([{ nome, google_property_id, clarity_project_id, clarity_token, umami_website_id, cliente_id, ativo: true }])
             .select()
             .single();
         if (error) throw error;
@@ -387,10 +387,10 @@ app.post('/api/admin/projetos', requireAdmin, async (req, res) => {
 app.put('/api/admin/projetos/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { nome, google_property_id, clarity_project_id, clarity_token, ativo } = req.body;
+        const { nome, google_property_id, clarity_project_id, clarity_token, umami_website_id, ativo } = req.body;
         const { data, error } = await supabaseAdmin
             .from('projetos')
-            .update({ nome, google_property_id, clarity_project_id, clarity_token, ativo })
+            .update({ nome, google_property_id, clarity_project_id, clarity_token, umami_website_id, ativo })
             .eq('id', id)
             .select()
             .single();
@@ -422,7 +422,7 @@ app.get('/api/meus-projetos', requireAuth, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('projetos')
-            .select('id, nome, google_property_id, clarity_project_id, clarity_token')
+            .select('id, nome, google_property_id, clarity_project_id, clarity_token, umami_website_id')
             .eq('cliente_id', req.user.id)
             .eq('ativo', true)
             .order('nome');

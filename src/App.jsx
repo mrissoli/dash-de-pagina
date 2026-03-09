@@ -254,7 +254,7 @@ function AdminPanel({ user }) {
   // Estado do formulário de projeto
   const [editingProjeto, setEditingProjeto] = useState(null);
   const [showProjetoForm, setShowProjetoForm] = useState(false);
-  const [projetoForm, setProjetoForm] = useState({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: '' });
+  const [projetoForm, setProjetoForm] = useState({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', umami_website_id: '', cliente_id: '' });
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ text: '', type: '' });
@@ -323,13 +323,13 @@ function AdminPanel({ user }) {
   // ---- CRUD Projetos ----
   const openCreateProjeto = () => {
     setEditingProjeto(null);
-    setProjetoForm({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', cliente_id: selectedCliente?.user_id || '' });
+    setProjetoForm({ nome: '', google_property_id: '', clarity_project_id: '', clarity_token: '', umami_website_id: '', cliente_id: selectedCliente?.user_id || '' });
     setShowProjetoForm(true);
   };
 
   const openEditProjeto = (p) => {
     setEditingProjeto(p);
-    setProjetoForm({ nome: p.nome, google_property_id: p.google_property_id, clarity_project_id: p.clarity_project_id || '', clarity_token: p.clarity_token || '', cliente_id: p.cliente_id });
+    setProjetoForm({ nome: p.nome, google_property_id: p.google_property_id, clarity_project_id: p.clarity_project_id || '', clarity_token: p.clarity_token || '', umami_website_id: p.umami_website_id || '', cliente_id: p.cliente_id });
     setShowProjetoForm(true);
   };
 
@@ -484,6 +484,7 @@ function AdminPanel({ user }) {
                   <div><label style={labelSt}>GA4 Property ID *</label><input style={inputSt} placeholder="Ex: 504225943" value={projetoForm.google_property_id} onChange={e => setProjetoForm({ ...projetoForm, google_property_id: e.target.value })} /></div>
                   <div><label style={labelSt}>Clarity Project ID</label><input style={inputSt} placeholder="Ex: abc123xyz" value={projetoForm.clarity_project_id} onChange={e => setProjetoForm({ ...projetoForm, clarity_project_id: e.target.value })} /></div>
                   <div><label style={labelSt}>Clarity API Token</label><input style={inputSt} placeholder="Bearer token do Clarity" value={projetoForm.clarity_token} onChange={e => setProjetoForm({ ...projetoForm, clarity_token: e.target.value })} /></div>
+                  <div style={{ gridColumn: '1/-1' }}><label style={labelSt}>Umami Website ID</label><input style={inputSt} placeholder="UUID do website no Umami" value={projetoForm.umami_website_id} onChange={e => setProjetoForm({ ...projetoForm, umami_website_id: e.target.value })} /></div>
                   {!selectedCliente && <div style={{ gridColumn: '1/-1' }}><label style={labelSt}>Cliente (user_id)</label><input style={inputSt} placeholder="UUID do cliente" value={projetoForm.cliente_id} onChange={e => setProjetoForm({ ...projetoForm, cliente_id: e.target.value })} /></div>}
                 </div>
                 <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
@@ -501,9 +502,10 @@ function AdminPanel({ user }) {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{p.nome}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
                       <span>📊 GA4: <code style={{ color: 'var(--accent-color)' }}>{p.google_property_id}</code></span>
                       {p.clarity_project_id && <span>🎯 Clarity: <code style={{ color: '#10b981' }}>{p.clarity_project_id}</code></span>}
+                      {p.umami_website_id && <span>🌐 Umami: <code style={{ color: '#8b5cf6' }}>{p.umami_website_id.split('-')[0]}...</code></span>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
@@ -744,13 +746,18 @@ function DashboardScreen({ user, onLogout }) {
           const wData = await wRes.json();
           if (wData.success && wData.data?.length > 0) {
             setUmamiWebsites(wData.data);
-            setSelectedUmamiWebsite(wData.data[0]);
+            if (selectedProjeto?.umami_website_id) {
+              const matched = wData.data.find(w => w.id === selectedProjeto.umami_website_id);
+              setSelectedUmamiWebsite(matched || null);
+            } else {
+              setSelectedUmamiWebsite(null);
+            }
           }
         }
       } catch { }
     };
     init();
-  }, []);
+  }, [selectedProjeto?.umami_website_id]);
 
   // ===== Fetch Umami Dashboard Data =====
   useEffect(() => {
@@ -1382,21 +1389,12 @@ function DashboardScreen({ user, onLogout }) {
             <p>{umamiConfigured ? `Dados precisos via Umami — sem sampling, sem ad blockers` : 'Configure o Umami para ver dados detalhados'}</p>
           </div>
           <div className="header-actions">
-            {umamiConfigured && umamiWebsites.length > 0 && (
-              <div className="date-picker" onClick={() => setShowUmamiWebsiteMenu(!showUmamiWebsiteMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px' }}>
-                <BarChart3 size={16} color="#10b981" />
-                <span style={{ color: '#10b981' }}>{selectedUmamiWebsite?.name || 'Website'}</span>
-                <ChevronDown size={16} color="var(--text-secondary)" />
-                {showUmamiWebsiteMenu && (
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '220px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-                    {umamiWebsites.map(w => (
-                      <div key={w.id} onClick={e => { e.stopPropagation(); setSelectedUmamiWebsite(w); setShowUmamiWebsiteMenu(false); }}
-                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: selectedUmamiWebsite?.id === w.id ? '#10b981' : 'var(--text-primary)', fontWeight: selectedUmamiWebsite?.id === w.id ? 700 : 400, background: selectedUmamiWebsite?.id === w.id ? 'rgba(16,185,129,0.1)' : 'transparent' }}>
-                        🌐 {w.name} <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>({w.domain})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {umamiConfigured && (
+              <div className="date-picker" style={{ background: selectedUmamiWebsite ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', cursor: 'default', userSelect: 'none', marginRight: '8px' }}>
+                <BarChart3 size={16} color={selectedUmamiWebsite ? "#10b981" : "#ef4444"} />
+                <span style={{ color: selectedUmamiWebsite ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                  {selectedUmamiWebsite ? selectedUmamiWebsite.name : 'Nenhum site vinculado'}
+                </span>
               </div>
             )}
             <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
@@ -1438,6 +1436,24 @@ function DashboardScreen({ user, onLogout }) {
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{f.desc}</div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        ) : !selectedUmamiWebsite ? (
+          <div className="dashboard">
+            <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
+              <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔗</div>
+              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Projeto sem Umami vinculado</div>
+              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
+                Este projeto ({selectedProjeto?.nome}) ainda não possui um <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>Umami Website ID</code> configurado.
+              </div>
+              <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', padding: '16px', borderRadius: '12px', display: 'inline-block', textAlign: 'left', maxWidth: '400px' }}>
+                <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 600 }}>Como resolver:</p>
+                <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <li style={{ marginBottom: '6px' }}>Vá na aba <strong>Admin</strong></li>
+                  <li style={{ marginBottom: '6px' }}>Encontre este projeto e clique em editar (✏️)</li>
+                  <li>Cole o UUID do site que está no painel do Umami</li>
+                </ol>
               </div>
             </div>
           </div>

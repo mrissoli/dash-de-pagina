@@ -954,6 +954,358 @@ app.get('/api/countries', async (req, res) => {
     }
 });
 
+// ============================================
+// Endpoint: Dados de Conversão (Taxa, UTM, Horário, Mobile vs Desktop)
+// ============================================
+app.get('/api/conversion-data', async (req, res) => {
+    try {
+        const propertyId = req.query.propertyId;
+        const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
+        const leadEventName = req.query.leadEvent || 'lead'; // nome do evento de lead
+        if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const prop = `properties/${propertyId}`;
+        const dateRanges = [{ startDate, endDate }];
+
+        const [resSessions, resLeads, resUtm, resHourly, resDeviceConv] = await Promise.allSettled([
+            // Total de sessões
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                metrics: [{ name: 'sessions' }],
+            }),
+            // Total de leads (evento específico)
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'eventName' }],
+                metrics: [{ name: 'eventCount' }],
+                dimensionFilter: {
+                    filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: leadEventName } }
+                },
+            }),
+            // Conversão por UTM (source + campaign)
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'sessionSource' }, { name: 'sessionCampaignName' }],
+                metrics: [{ name: 'sessions' }, { name: 'eventCount' }],
+                metricFilter: { filter: { fieldName: 'eventCount', numericFilter: { operation: 'GREATER_THAN', value: { int64Value: '0' } } } },
+                orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+                limit: 20,
+            }),
+            // Horário de pico de conversão (hora do dia)
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'hour' }],
+                metrics: [{ name: 'sessions' }, { name: 'eventCount' }],
+                orderBys: [{ dimension: { dimensionName: 'hour' } }],
+                dimensionFilter: undefined,
+                limit: 24,
+            }),
+            // Conversão Mobile vs Desktop
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'deviceCategory' }],
+                metrics: [{ name: 'sessions' }, { name: 'eventCount' }],
+            }),
+        ]);
+
+        // Total sessões
+        let totalSessions = 0;
+        if (resSessions.status === 'fulfilled') {
+            totalSessions = parseInt(resSessions.value[0]?.rows?.[0]?.metricValues?.[0]?.value || '0', 10);
+        }
+
+        // Total leads
+        let totalLeads = 0;
+        if (resLeads.status === 'fulfilled') {
+            totalLeads = parseInt(resLeads.value[0]?.rows?.[0]?.metricValues?.[0]?.value || '0', 10);
+        }
+        const conversionRate = totalSessions > 0 ? ((totalLeads / totalSessions) * 100).toFixed(2) : '0.00';
+
+        // UTM breakdown — usa os eventos (eventCount) como leads
+        let utmData = [];
+        if (resUtm.status === 'fulfilled') {
+            utmData = (resUtm.value[0]?.rows || []).map(r => {
+                const sessions = parseInt(r.metricValues[0].value, 10);
+                const leads = parseInt(r.metricValues[1].value, 10);
+                let source = r.dimensionValues[0].value;
+                let campaign = r.dimensionValues[1].value;
+                if (source === '(direct)') source = 'Direto';
+                else if (source === '(not set)') source = 'Não definido';
+                if (campaign === '(not set)' || campaign === '(none)') campaign = '—';
+                return {
+                    source,
+                    campaign,
+                    sessions,
+                    leads,
+                    rate: sessions > 0 ? ((leads / sessions) * 100).toFixed(1) + '%' : '0%'
+                };
+            });
+        }
+
+        // Horário de pico
+        let hourlyData = [];
+        if (resHourly.status === 'fulfilled') {
+            hourlyData = (resHourly.value[0]?.rows || []).map(r => {
+                const hour = parseInt(r.dimensionValues[0].value, 10);
+                const sessions = parseInt(r.metricValues[0].value, 10);
+                const leads = parseInt(r.metricValues[1].value, 10);
+                return {
+                    hour: `${String(hour).padStart(2, '0')}h`,
+                    sessions,
+                    leads,
+                    rate: sessions > 0 ? ((leads / sessions) * 100).toFixed(1) : '0'
+                };
+            });
+        }
+
+        // Mobile vs Desktop conversion
+        let deviceConv = [];
+        if (resDeviceConv.status === 'fulfilled') {
+            deviceConv = (resDeviceConv.value[0]?.rows || []).map(r => {
+                const device = r.dimensionValues[0].value;
+                const sessions = parseInt(r.metricValues[0].value, 10);
+                const leads = parseInt(r.metricValues[1].value, 10);
+                return {
+                    device: device.charAt(0).toUpperCase() + device.slice(1),
+                    sessions,
+                    leads,
+                    rate: sessions > 0 ? ((leads / sessions) * 100).toFixed(2) : '0.00'
+                };
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                totalSessions,
+                totalLeads,
+                conversionRate: conversionRate + '%',
+                utmData,
+                hourlyData,
+                deviceConv,
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Endpoint: Rage Clicks do Clarity
+// ============================================
+app.get('/api/clarity-rage-clicks', async (req, res) => {
+    try {
+        const { clarityToken, clarityProjectId } = req.query;
+        if (!clarityToken) return res.json({ success: false, message: 'Falta clarityToken' });
+
+        // Tenta a API de insights do Clarity para pegar rage clicks
+        const numDays = req.query.numDays || 7;
+        let rageClicks = null;
+        let deadClicks = null;
+        let excessiveScrolling = null;
+
+        try {
+            const resp = await axios.get('https://www.clarity.ms/export-data/api/v1/project-live-insights', {
+                params: { numOfDays: numDays },
+                headers: { Authorization: `Bearer ${clarityToken}` },
+                timeout: 5000,
+            });
+            const d = resp.data;
+            // Clarity retorna objeto ou array dependendo da versão
+            if (Array.isArray(d) && d.length > 0) {
+                const first = d[0];
+                rageClicks = first.rageClickCount ?? first.rageClicks ?? null;
+                deadClicks = first.deadClickCount ?? first.deadClicks ?? null;
+                excessiveScrolling = first.excessiveScrollCount ?? null;
+            } else if (d && typeof d === 'object') {
+                rageClicks = d.rageClickCount ?? d.rageClicks ?? null;
+                deadClicks = d.deadClickCount ?? d.deadClicks ?? null;
+                excessiveScrolling = d.excessiveScrollCount ?? null;
+            }
+        } catch (clarityErr) {
+            console.warn('Clarity rage clicks API error:', clarityErr.response?.data || clarityErr.message);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                rageClicks: rageClicks !== null ? rageClicks : '—',
+                deadClicks: deadClicks !== null ? deadClicks : '—',
+                excessiveScrolling: excessiveScrolling !== null ? excessiveScrolling : '—',
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Endpoint: PageSpeed Score (Google PageSpeed Insights)
+// ============================================
+app.get('/api/pagespeed', async (req, res) => {
+    try {
+        const { url: pageUrl } = req.query;
+        if (!pageUrl) return res.json({ success: false, message: 'Falta url' });
+
+        const PAGESPEED_KEY = process.env.PAGESPEED_API_KEY || '';
+        const strategies = ['mobile', 'desktop'];
+        const results = {};
+
+        await Promise.all(strategies.map(async (strategy) => {
+            try {
+                const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(pageUrl)}&strategy=${strategy}${PAGESPEED_KEY ? `&key=${PAGESPEED_KEY}` : ''}`;
+                const resp = await axios.get(apiUrl, { timeout: 20000 });
+                const score = Math.round((resp.data?.lighthouseResult?.categories?.performance?.score || 0) * 100);
+                const fcp = resp.data?.lighthouseResult?.audits?.['first-contentful-paint']?.displayValue || '—';
+                const lcp = resp.data?.lighthouseResult?.audits?.['largest-contentful-paint']?.displayValue || '—';
+                const cls = resp.data?.lighthouseResult?.audits?.['cumulative-layout-shift']?.displayValue || '—';
+                const tbt = resp.data?.lighthouseResult?.audits?.['total-blocking-time']?.displayValue || '—';
+                results[strategy] = { score, fcp, lcp, cls, tbt };
+            } catch (e) {
+                console.warn(`PageSpeed ${strategy} error:`, e.message);
+                results[strategy] = { score: null, fcp: '—', lcp: '—', cls: '—', tbt: '—' };
+            }
+        }));
+
+        res.json({ success: true, data: results });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Endpoint: Sessões vs Leads por dia (gráfico de linha temporal)
+// ============================================
+app.get('/api/traffic-leads', async (req, res) => {
+    try {
+        const propertyId = req.query.propertyId;
+        const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
+        const leadEventName = req.query.leadEvent || 'lead';
+        if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const prop = `properties/${propertyId}`;
+        const dateRanges = [{ startDate, endDate }];
+
+        // Sessões por dia
+        const [resSessions, resLeads] = await Promise.allSettled([
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'date' }],
+                metrics: [{ name: 'sessions' }],
+                orderBys: [{ dimension: { dimensionName: 'date' } }],
+            }),
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'date' }],
+                metrics: [{ name: 'eventCount' }],
+                dimensionFilter: {
+                    filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: leadEventName } }
+                },
+                orderBys: [{ dimension: { dimensionName: 'date' } }],
+            }),
+        ]);
+
+        // Merge por data
+        const sessionsMap = {};
+        if (resSessions.status === 'fulfilled') {
+            (resSessions.value[0]?.rows || []).forEach(r => {
+                sessionsMap[r.dimensionValues[0].value] = parseInt(r.metricValues[0].value, 10);
+            });
+        }
+        const leadsMap = {};
+        if (resLeads.status === 'fulfilled') {
+            (resLeads.value[0]?.rows || []).forEach(r => {
+                leadsMap[r.dimensionValues[0].value] = parseInt(r.metricValues[0].value, 10);
+            });
+        }
+
+        const allDates = [...new Set([...Object.keys(sessionsMap), ...Object.keys(leadsMap)])].sort();
+        const data = allDates.map(date => ({
+            date,
+            sessions: sessionsMap[date] || 0,
+            leads: leadsMap[date] || 0,
+        }));
+
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// Endpoint: Funil de Scroll (GA4 Events)
+// ============================================
+app.get('/api/scroll-funnel', async (req, res) => {
+    try {
+        const propertyId = req.query.propertyId;
+        const startDate = req.query.dateRange || '7daysAgo';
+        const endDate = req.query.endDate || 'today';
+        if (!propertyId) return res.json({ success: false, message: 'Falta propertyId' });
+        if (!analyticsDataClient) return res.status(503).json({ success: false, error: 'GA4 não configurado.' });
+
+        const prop = `properties/${propertyId}`;
+        const dateRanges = [{ startDate, endDate }];
+
+        // Pega eventos de scroll e os principais eventos que formam o funil
+        const [resEvents, resSessions] = await Promise.allSettled([
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                dimensions: [{ name: 'eventName' }],
+                metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+                orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+                limit: 30,
+            }),
+            analyticsDataClient.runReport({
+                property: prop, dateRanges,
+                metrics: [{ name: 'sessions' }, { name: 'activeUsers' }],
+            }),
+        ]);
+
+        let totalSessions = 0;
+        let totalUsers = 0;
+        if (resSessions.status === 'fulfilled') {
+            const row = resSessions.value[0]?.rows?.[0]?.metricValues;
+            if (row) {
+                totalSessions = parseInt(row[0].value, 10);
+                totalUsers = parseInt(row[1].value, 10);
+            }
+        }
+
+        let eventMap = {};
+        if (resEvents.status === 'fulfilled') {
+            (resEvents.value[0]?.rows || []).forEach(r => {
+                eventMap[r.dimensionValues[0].value] = {
+                    count: parseInt(r.metricValues[0].value, 10),
+                    users: parseInt(r.metricValues[1].value, 10),
+                };
+            });
+        }
+
+        // Scroll depth events do GA4 (scroll evento com parâmetro percent_scrolled)
+        const scroll50 = eventMap['scroll']?.users || eventMap['scroll_50']?.users || eventMap['50_percent_scroll']?.users || null;
+        const scroll75 = eventMap['scroll_75']?.users || eventMap['75_percent_scroll']?.users || null;
+        const leadEvent = eventMap['lead']?.users || eventMap['gerar_lead']?.users || eventMap['contact']?.users || null;
+        const clickCTA = eventMap['click']?.users || eventMap['cta_click']?.users || eventMap['button_click']?.users || null;
+
+        // Constrói funil
+        const funnel = [
+            { name: 'Sessões', value: totalSessions, color: '#6366f1' },
+            { name: 'Scroll 50%', value: scroll50 !== null ? scroll50 : Math.round(totalSessions * 0.6), color: '#3b82f6', estimated: scroll50 === null },
+            { name: 'Scroll até CTA', value: scroll75 !== null ? scroll75 : Math.round(totalSessions * 0.35), color: '#10b981', estimated: scroll75 === null },
+            { name: 'Clique no botão', value: clickCTA !== null ? clickCTA : Math.round(totalSessions * 0.2), color: '#f59e0b', estimated: clickCTA === null },
+            { name: 'Lead', value: leadEvent !== null ? leadEvent : (eventMap['lead']?.count || 0), color: '#ef4444', estimated: leadEvent === null },
+        ];
+
+        res.json({ success: true, data: { funnel, eventMap, totalSessions, totalUsers } });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BarChart3, Users, Clock, MousePointerClick, Activity, ChevronDown, Calendar,
-  LayoutDashboard, Settings, Bell, ArrowUpRight, ArrowDownRight,
-  MonitorPlay, Flame, Mail, Lock, LogIn, Shield, Smartphone, Monitor, Tablet,
-  FolderOpen, Plus, Pencil, Trash2, Check, X, ChevronRight, ShieldCheck
+  LayoutDashboard, ArrowUpRight, ArrowDownRight,
+  MonitorPlay, Mail, Lock, LogIn, Shield, Smartphone, Monitor, Tablet,
+  FolderOpen, Plus, Pencil, Trash2, Check, X, ShieldCheck,
+  Zap, TrendingUp, MousePointer2, Gauge, Filter
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, Cell, PieChart, Pie
+  BarChart, Bar, Cell, PieChart, Pie, LineChart, Line, FunnelChart, Funnel, LabelList
 } from 'recharts';
 import { supabase, isSupabaseReady } from './lib/supabase';
 
@@ -495,6 +496,16 @@ function DashboardScreen({ user, onLogout }) {
   const [dashboardError, setDashboardError] = useState('');
   const realtimeIntervalRef = useRef(null);
 
+  // Novos estados
+  const [conversionData, setConversionData] = useState({ conversionRate: '...', totalLeads: '...', utmData: [], hourlyData: [], deviceConv: [] });
+  const [rageClickData, setRageClickData] = useState({ rageClicks: '...', deadClicks: '...', excessiveScrolling: '...' });
+  const [pageSpeedData, setPageSpeedData] = useState(null);
+  const [pageSpeedLoading, setPageSpeedLoading] = useState(false);
+  const [trafficLeadsData, setTrafficLeadsData] = useState([]);
+  const [funnelData, setFunnelData] = useState([]);
+  // URL base do cliente p/ PageSpeed (configurável)
+  const [pageSpeedUrl, setPageSpeedUrl] = useState('');
+
   const thisYear = new Date().getFullYear();
   const dateOptions = [
     { label: 'Hoje', value: 'today', startDate: 'today', endDate: 'today' },
@@ -564,16 +575,21 @@ function DashboardScreen({ user, onLogout }) {
         const ct = `&clarityToken=${encodeURIComponent(selectedProjeto.clarity_token || '')}`;
         const pp = selectedPage ? `&pagePath=${encodeURIComponent(selectedPage.path)}` : '';
 
-        const [resMetrics, resTraffic, resSources, resEvents, resDevices, resBrowsers, resCountries, resTopPages] = await Promise.all([
-          fetch(`${API_BASE}/metrics?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/traffic?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/sources?${pid}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/events?${pid}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/devices?${pid}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/browsers?${pid}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/countries?${pid}${dr}${pp}`, { credentials: 'include' }),
-          fetch(`${API_BASE}/top-pages?${pid}${dr}`, { credentials: 'include' }),
-        ]);
+        const [resMetrics, resTraffic, resSources, resEvents, resDevices, resBrowsers, resCountries, resTopPages,
+          resConversion, resRageClicks, resTrafficLeads, resFunnel] = await Promise.all([
+            fetch(`${API_BASE}/metrics?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/traffic?${pid}${ct}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/sources?${pid}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/events?${pid}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/devices?${pid}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/browsers?${pid}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/countries?${pid}${dr}${pp}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/top-pages?${pid}${dr}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/conversion-data?${pid}${dr}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/clarity-rage-clicks?${ct.replace('&clarityToken=', 'clarityToken=')}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/traffic-leads?${pid}${dr}`, { credentials: 'include' }),
+            fetch(`${API_BASE}/scroll-funnel?${pid}${dr}`, { credentials: 'include' }),
+          ]);
 
         // Métricas
         if (resMetrics.ok) {
@@ -597,35 +613,36 @@ function DashboardScreen({ user, onLogout }) {
           }
         }
 
-        // Canais de origem
-        if (resSources.ok) {
-          const sData = await resSources.json();
-          if (sData.success && sData.data) setSourcesData(sData.data);
+        if (resSources.ok) { const s = await resSources.json(); if (s.success && s.data) setSourcesData(s.data); }
+        if (resEvents.ok) { const e = await resEvents.json(); if (e.success && e.data) setEventsData(e.data); }
+        if (resDevices.ok) { const d = await resDevices.json(); if (d.success && d.data) setDevicesData(d.data); }
+        if (resBrowsers.ok) { const b = await resBrowsers.json(); if (b.success && b.data) setBrowsersData(b.data); }
+        if (resCountries.ok) { const c = await resCountries.json(); if (c.success && c.data) setCountriesData(c.data); }
+        if (resTopPages.ok) { const tp = await resTopPages.json(); if (tp.success && tp.data) setTopPagesData(tp.data); }
+
+        // Novos endpoints
+        if (resConversion.ok) {
+          const cv = await resConversion.json();
+          if (cv.success && cv.data) setConversionData(cv.data);
         }
-        // Eventos
-        if (resEvents.ok) {
-          const eData = await resEvents.json();
-          if (eData.success && eData.data) setEventsData(eData.data);
+        if (resRageClicks.ok) {
+          const rc = await resRageClicks.json();
+          if (rc.success && rc.data) setRageClickData(rc.data);
         }
-        // Dispositivos
-        if (resDevices.ok) {
-          const dData = await resDevices.json();
-          if (dData.success && dData.data) setDevicesData(dData.data);
+        if (resTrafficLeads.ok) {
+          const tl = await resTrafficLeads.json();
+          if (tl.success && tl.data) {
+            const formatted = tl.data.map(item => {
+              const d = new Date(item.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+              const shortDay = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
+              return { name: shortDay, sessions: item.sessions, leads: item.leads };
+            });
+            setTrafficLeadsData(formatted);
+          }
         }
-        // Navegadores
-        if (resBrowsers.ok) {
-          const bData = await resBrowsers.json();
-          if (bData.success && bData.data) setBrowsersData(bData.data);
-        }
-        // Países
-        if (resCountries.ok) {
-          const cData = await resCountries.json();
-          if (cData.success && cData.data) setCountriesData(cData.data);
-        }
-        // Top páginas
-        if (resTopPages.ok) {
-          const tpData = await resTopPages.json();
-          if (tpData.success && tpData.data) setTopPagesData(tpData.data);
+        if (resFunnel.ok) {
+          const fn = await resFunnel.json();
+          if (fn.success && fn.data?.funnel) setFunnelData(fn.data.funnel);
         }
       } catch (error) {
         console.error('Falha ao buscar dados', error);
@@ -637,6 +654,20 @@ function DashboardScreen({ user, onLogout }) {
 
     fetchData();
   }, [selectedProjeto, dateRange, selectedPage]);
+
+  // PageSpeed — carrega quando o projeto muda (URL separada)
+  useEffect(() => {
+    const fetchPageSpeed = async () => {
+      if (!pageSpeedUrl) return;
+      setPageSpeedLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/pagespeed?url=${encodeURIComponent(pageSpeedUrl)}`);
+        const d = await res.json();
+        if (d.success && d.data) setPageSpeedData(d.data);
+      } catch { } finally { setPageSpeedLoading(false); }
+    };
+    fetchPageSpeed();
+  }, [pageSpeedUrl]);
 
   // Busca páginas disponíveis quando muda o projeto ou período
   useEffect(() => {
@@ -681,7 +712,7 @@ function DashboardScreen({ user, onLogout }) {
       </aside>
       {activeNav === 'admin' && isAdmin && <main className="main-content"><AdminPanel user={user} /></main>}
 
-      {activeNav !== 'admin' && <main className="main-content">
+      {(activeNav === 'dashboard' || activeNav === 'analytics') && <main className="main-content">
         <header className="header">
           <div className="header-title">
             <h1>{selectedProjeto?.nome || 'Visão Geral da Conta'}</h1>
@@ -780,53 +811,153 @@ function DashboardScreen({ user, onLogout }) {
           <div className="metrics-grid">
             <MetricCard title="Usuários Ao Vivo" value={realtimeUsers !== null ? realtimeUsers : '...'} icon={Activity} colorClass="icon-green" isLive={true} />
             <MetricCard title="Total de Sessões (GA)" value={metrics.totalVisitsGA} change="-" trend="up" icon={Users} colorClass="icon-blue" />
-            <MetricCard title="Taxa de Rejeição (GA)" value={metrics.bounceRateGA} change="-" trend="down" icon={MousePointerClick} colorClass="icon-orange" />
-            <MetricCard title="Tempo Médio (GA)" value={metrics.avgTimeGA || '00:00'} change="-" trend="up" icon={Clock} colorClass="icon-purple" />
+            <MetricCard title="Tempo Médio na Página" value={metrics.avgTimeGA || '00:00'} change="-" trend="up" icon={Clock} colorClass="icon-purple" />
+            <MetricCard title="Usuários (Clarity)" value={metrics.activeUsersClarity} change="-" trend="up" icon={MonitorPlay} colorClass="icon-orange" />
           </div>
           <div className="metrics-grid" style={{ marginTop: '16px' }}>
             <MetricCard title="Novos Usuários (GA)" value={metrics.newUsersGA} change="-" trend="up" icon={Users} colorClass="icon-blue" />
-            <MetricCard title="Págs/Sessão (GA)" value={metrics.pagesPerSessionGA} change="-" trend="up" icon={LayoutDashboard} colorClass="icon-green" />
-            <MetricCard title="Usuários (Clarity)" value={metrics.activeUsersClarity} change="-" trend="up" icon={MonitorPlay} colorClass="icon-orange" />
+            <MetricCard title="Taxa de Conversão" value={conversionData.conversionRate} change="-" trend="up" icon={TrendingUp} colorClass="icon-green" />
+            {/* Rage Clicks */}
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Rage Clicks (Clarity)</span>
+                <div className="metric-icon icon-orange"><MousePointer2 size={20} /></div>
+              </div>
+              <span className="metric-value">{rageClickData.rageClicks}</span>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Dead clicks: <strong>{rageClickData.deadClicks}</strong></div>
+            </div>
+            {/* PageSpeed */}
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Velocidade da Página</span>
+                <div className="metric-icon icon-purple"><Gauge size={20} /></div>
+              </div>
+              {pageSpeedData ? (
+                <>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Mobile</div>
+                      <div style={{ fontSize: '28px', fontWeight: 800, color: pageSpeedData.mobile?.score >= 90 ? '#10b981' : pageSpeedData.mobile?.score >= 50 ? '#f59e0b' : '#ef4444' }}>{pageSpeedData.mobile?.score ?? '—'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Desktop</div>
+                      <div style={{ fontSize: '28px', fontWeight: 800, color: pageSpeedData.desktop?.score >= 90 ? '#10b981' : pageSpeedData.desktop?.score >= 50 ? '#f59e0b' : '#ef4444' }}>{pageSpeedData.desktop?.score ?? '—'}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>LCP Mobile: {pageSpeedData.mobile?.lcp}</div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                  {pageSpeedLoading ? <div className="loader" style={{ borderColor: 'rgba(139,92,246,0.3)', borderTopColor: '#8b5cf6', width: '20px', height: '20px' }} /> : (
+                    <>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Informe a URL para analisar:</div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          placeholder="https://seusite.com.br"
+                          style={{ flex: 1, padding: '6px 10px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
+                          onKeyDown={e => { if (e.key === 'Enter') setPageSpeedUrl(e.target.value); }}
+                          defaultValue={pageSpeedUrl}
+                        />
+                        <button onClick={e => { const inp = e.currentTarget.previousSibling; setPageSpeedUrl(inp.value); }} style={{ padding: '6px 10px', background: 'var(--accent-color)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>OK</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* ===== Sessões vs Leads + Funil ===== */}
           <div className="charts-grid">
+            {/* Linha: Sessões vs Leads */}
             <div className="glass-card">
               <div className="card-title-row">
-                <span className="card-title">Tráfego vs Interações Interativas</span>
+                <span className="card-title">Sessões vs Leads (Linha do Tempo)</span>
               </div>
               <div style={{ height: '300px', width: '100%', position: 'relative' }}>
                 {isLoading ? (
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                    <div className="loader" style={{ borderColor: 'rgba(59, 130, 246, 0.3)', borderTopColor: '#3b82f6' }}></div>
-                  </div>
-                ) : trafficData.length > 0 ? (
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><div className="loader" /></div>
+                ) : trafficLeadsData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trafficData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <LineChart data={trafficLeadsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
-                        <linearGradient id="colorAna" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient>
-                        <linearGradient id="colorCla" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.4} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                        <linearGradient id="gSess" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
-                      <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
-                      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} dy={8} />
+                      <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="analytics" name="Visitas (GA)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
-                      <Area type="monotone" dataKey="clarity" name="Interações (Clarity)" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCla)" />
-                    </AreaChart>
+                      <Line yAxisId="left" type="monotone" dataKey="sessions" name="Sessões" stroke="#6366f1" strokeWidth={2.5} dot={false} />
+                      <Line yAxisId="right" type="monotone" dataKey="leads" name="Leads" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} />
+                    </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                    Nenhum dado de tráfego disponível nos últimos 7 dias.
+                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>
+                    Sem dados. Verifique se o evento "lead" está configurado no GA4.
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Funil Visual */}
             <div className="glass-card">
-              <div className="card-title-row">
-                <span className="card-title">Canais de Origem</span>
+              <div className="card-title-row"><span className="card-title">Funil de Conversão</span></div>
+              <div style={{ padding: '8px 0' }}>
+                {funnelData.length > 0 ? funnelData.map((step, i) => {
+                  const prev = i === 0 ? step.value : funnelData[i - 1].value;
+                  const pct = prev > 0 ? ((step.value / funnelData[0].value) * 100).toFixed(0) : 0;
+                  const dropPct = i > 0 && prev > 0 ? (((prev - step.value) / prev) * 100).toFixed(0) : null;
+                  return (
+                    <div key={i} style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{step.name}{step.estimated ? ' *' : ''}</span>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          {dropPct && <span style={{ fontSize: '11px', color: '#ef4444' }}>-{dropPct}%</span>}
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: step.color }}>{step.value.toLocaleString('pt-BR')}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', minWidth: '36px', textAlign: 'right' }}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: step.color, borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                      </div>
+                    </div>
+                  );
+                }) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Carregando funil...</div>}
+                {funnelData.some(s => s.estimated) && <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '8px' }}>* Valores estimados (eventos não rastreados)</div>}
               </div>
-              <div style={{ height: '300px', width: '100%' }}>
+            </div>
+          </div>
+
+          {/* ===== Tráfego original + Canais ===== */}
+          <div className="charts-grid">
+            <div className="glass-card">
+              <div className="card-title-row"><span className="card-title">Tráfego (Sessões Diárias)</span></div>
+              <div style={{ height: '280px', width: '100%', position: 'relative' }}>
+                {isLoading ? (
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><div className="loader" style={{ borderColor: 'rgba(59,130,246,0.3)', borderTopColor: '#3b82f6' }} /></div>
+                ) : trafficData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trafficData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorAna" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                      <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="analytics" name="Sessões (GA)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Nenhum dado.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-card">
+              <div className="card-title-row"><span className="card-title">Canais de Origem</span></div>
+              <div style={{ height: '280px', width: '100%' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourcesData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
@@ -834,9 +965,7 @@ function DashboardScreen({ user, onLogout }) {
                     <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={80} />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                     <Bar dataKey="value" name="Acessos" radius={[0, 4, 4, 0]} barSize={20}>
-                      {sourcesData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
+                      {sourcesData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -900,6 +1029,89 @@ function DashboardScreen({ user, onLogout }) {
                     </div>
                   </>
                 ) : <div style={{ color: 'var(--text-secondary)', padding: '40px' }}>Sem dados de dispositivos.</div>}
+              </div>
+            </div>
+          </div>
+
+          {/* ===== Conversão UTM / Campanha ===== */}
+          <div className="glass-card" style={{ margin: '0' }}>
+            <div className="card-title-row"><span className="card-title">Conversão por UTM / Campanha</span></div>
+            <div style={{ overflowX: 'auto' }}>
+              {conversionData.utmData && conversionData.utmData.length > 0 ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                      {['FONTE', 'CAMPANHA', 'SESSÕES', 'LEADS', 'TAXA CONV.'].map(h => (
+                        <th key={h} style={{ textAlign: h === 'FONTE' || h === 'CAMPANHA' ? 'left' : 'right', padding: '12px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conversionData.utmData.map((row, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '10px 8px', fontSize: '13px', fontWeight: 600 }}>{row.source}</td>
+                        <td style={{ padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.campaign}</td>
+                        <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px' }}>{row.sessions.toLocaleString('pt-BR')}</td>
+                        <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', fontWeight: 700, color: '#10b981' }}>{row.leads}</td>
+                        <td style={{ textAlign: 'right', padding: '10px 8px' }}>
+                          <span style={{ background: parseFloat(row.rate) > 5 ? 'rgba(16,185,129,0.15)' : parseFloat(row.rate) > 2 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.1)', color: parseFloat(row.rate) > 5 ? '#10b981' : parseFloat(row.rate) > 2 ? '#f59e0b' : '#ef4444', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{row.rate}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão UTM. Configure o evento "lead" no GA4 e use parâmetros UTM nos seus anúncios.</div>}
+            </div>
+          </div>
+
+          {/* ===== Horas de Pico + Mobile vs Desktop Conversão ===== */}
+          <div className="charts-grid">
+            <div className="glass-card">
+              <div className="card-title-row"><span className="card-title">Horas de Pico de Conversão</span></div>
+              <div style={{ height: '260px' }}>
+                {conversionData.hourlyData && conversionData.hourlyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={conversionData.hourlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                      <XAxis dataKey="hour" stroke="var(--text-secondary)" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={2} />
+                      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                      <Bar dataKey="sessions" name="Sessões" radius={[3, 3, 0, 0]} barSize={14}>
+                        {(conversionData.hourlyData || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Bar>
+                      <Bar dataKey="leads" name="Leads" radius={[3, 3, 0, 0]} barSize={8} fill="#10b981" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados horários.</div>}
+              </div>
+            </div>
+
+            <div className="glass-card">
+              <div className="card-title-row"><span className="card-title">Conversão Mobile vs Desktop</span></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+                {conversionData.deviceConv && conversionData.deviceConv.length > 0 ? conversionData.deviceConv.map((d, i) => {
+                  const DevIcon = d.device === 'Mobile' ? Smartphone : d.device === 'Desktop' ? Monitor : Tablet;
+                  const color = DEVICE_COLORS[d.device] || COLORS[i % COLORS.length];
+                  const rate = parseFloat(d.rate);
+                  return (
+                    <div key={i} style={{ background: `${color}10`, border: `1px solid ${color}25`, borderRadius: '12px', padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <DevIcon size={18} color={color} />
+                          <span style={{ fontWeight: 600, fontSize: '14px' }}>{d.device}</span>
+                        </div>
+                        <span style={{ fontSize: '22px', fontWeight: 800, color }}>{d.rate}%</span>
+                      </div>
+                      <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                        <div style={{ height: '100%', width: `${Math.min(rate * 10, 100)}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        <span>{d.sessions.toLocaleString('pt-BR')} sessões</span>
+                        <span><strong style={{ color }}>{d.leads}</strong> leads</span>
+                      </div>
+                    </div>
+                  );
+                }) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão por dispositivo.</div>}
               </div>
             </div>
           </div>
@@ -999,6 +1211,119 @@ function DashboardScreen({ user, onLogout }) {
             </div>
           </div>
 
+        </div>
+      </main>}
+
+      {/* ===== ABA: MAPAS DE CALOR (CLARITY) ===== */}
+      {activeNav === 'clarity' && <main className="main-content">
+        <header className="header">
+          <div className="header-title">
+            <h1>Mapas de Calor & Comportamento</h1>
+            <p>Dados de comportamento real via Microsoft Clarity</p>
+          </div>
+        </header>
+        <div className="dashboard">
+          {/* Métricas de comportamento do Clarity */}
+          <div className="metrics-grid">
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Rage Clicks</span>
+                <div className="metric-icon icon-orange"><MousePointer2 size={20} /></div>
+              </div>
+              <span className="metric-value">{rageClickData.rageClicks}</span>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários frustrados clicando repetidamente</div>
+            </div>
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Dead Clicks</span>
+                <div className="metric-icon icon-purple"><MousePointerClick size={20} /></div>
+              </div>
+              <span className="metric-value">{rageClickData.deadClicks}</span>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Cliques em elementos não interativos</div>
+            </div>
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Scroll Excessivo</span>
+                <div className="metric-icon icon-blue"><Zap size={20} /></div>
+              </div>
+              <span className="metric-value">{rageClickData.excessiveScrolling}</span>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários com scroll excessivo na página</div>
+            </div>
+            <div className="glass-card metric-card">
+              <div className="metric-header">
+                <span className="metric-title">Usuários (Clarity)</span>
+                <div className="metric-icon icon-green"><Users size={20} /></div>
+              </div>
+              <span className="metric-value">{metrics.activeUsersClarity}</span>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Sessões registradas pelo Clarity</div>
+            </div>
+          </div>
+
+          {/* Link para o Clarity + explicação */}
+          <div className="glass-card" style={{ padding: '28px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <MonitorPlay size={24} color="#3b82f6" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>Gravações de Sessão e Mapas de Calor</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Assista a gravações reais de usuários e visualize mapas de calor diretamente no painel do Clarity.</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              {[
+                { icon: '🎥', title: 'Gravações de Sessão', desc: 'Assista à jornada real de cada usuário na sua página' },
+                { icon: '🔥', title: 'Heatmaps de Clique', desc: 'Veja onde os usuários mais clicam na página' },
+                { icon: '📜', title: 'Heatmaps de Scroll', desc: 'Identifique até onde os usuários chegam na página' },
+                { icon: '⚡', title: 'Comportamento de UX', desc: 'Rage clicks, dead clicks e scroll excessivo' },
+              ].map((item, i) => (
+                <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '10px', padding: '14px', border: '1px solid var(--surface-border)' }}>
+                  <div style={{ fontSize: '20px', marginBottom: '6px' }}>{item.icon}</div>
+                  <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{item.title}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.desc}</div>
+                </div>
+              ))}
+            </div>
+            {selectedProjeto?.clarity_project_id ? (
+              <a
+                href={`https://clarity.microsoft.com/projects/view/${selectedProjeto.clarity_project_id}/heatmaps`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: 'var(--accent-color)', borderRadius: '10px', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '14px', transition: 'opacity 0.2s' }}
+                onMouseOver={e => e.currentTarget.style.opacity = '0.85'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}
+              >
+                <MonitorPlay size={18} /> Abrir Clarity Dashboard →
+              </a>
+            ) : (
+              <div style={{ padding: '14px 18px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px', fontSize: '13px', color: '#f59e0b' }}>
+                ⚠️ Clarity Project ID não configurado para este projeto. Configure no painel Admin → Projetos.
+              </div>
+            )}
+          </div>
+
+          {/* Resumo de insights de comportamento */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div className="card-title-row"><span className="card-title">💡 Insights de Comportamento</span></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+              {[
+                rageClickData.rageClicks !== '—' && rageClickData.rageClicks > 0 && {
+                  color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)',
+                  icon: '⚠️', text: `${rageClickData.rageClicks} rage clicks detectados — usuários estão ficando frustrados com algo na página. Verifique botões com delays de resposta.`
+                },
+                rageClickData.deadClicks !== '—' && rageClickData.deadClicks > 0 && {
+                  color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',
+                  icon: '🎯', text: `${rageClickData.deadClicks} dead clicks — usuários clicam em elementos que não são clicáveis. Considere tornar esses elementos interativos ou melhorar clareza visual.`
+                },
+                { color: '#6366f1', bg: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.2)', icon: '📊', text: 'Use as gravações de sessão para identificar onde os usuários abandonam o formulário ou não encontram o botão de CTA.' },
+                { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)', icon: '🔥', text: 'Combine os dados do mapa de calor de scroll com a taxa de conversão para saber se o CTA está visível para mais de 50% dos visitantes.' },
+              ].filter(Boolean).map((insight, i) => (
+                <div key={i} style={{ padding: '14px 16px', background: insight.bg, border: `1px solid ${insight.border}`, borderRadius: '10px', fontSize: '13px', color: insight.color, lineHeight: '1.5' }}>
+                  {insight.icon} {insight.text}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </main>}
     </>

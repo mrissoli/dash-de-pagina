@@ -1597,9 +1597,9 @@ app.get('/api/umami/dashboard', async (req, res) => {
         const prv = prevStats.status === 'fulfilled' ? prevStats.value : {};
         const calcChange = (a, b) => b > 0 ? (((a - b) / b) * 100).toFixed(1) : '0';
 
-        const avgTime = cur.visits?.value > 0 ? Math.round((cur.totaltime?.value || 0) / cur.visits.value) : 0;
-        const avgTimePrev = prv.visits?.value > 0 ? Math.round((prv.totaltime?.value || 0) / prv.visits.value) : 0;
-        const bounceRate = cur.visits?.value > 0 ? ((cur.bounces?.value || 0) / cur.visits.value * 100).toFixed(1) + '%' : '0%';
+        const avgTime = cur.visits > 0 ? Math.round((cur.totaltime || 0) / cur.visits) : 0;
+        const avgTimePrev = prv.visits > 0 ? Math.round((prv.totaltime || 0) / prv.visits) : 0;
+        const bounceRate = cur.visits > 0 ? ((cur.bounces || 0) / cur.visits * 100).toFixed(1) + '%' : '0%';
 
         // Contar leads nos eventos
         let allEvents = [];
@@ -1610,7 +1610,7 @@ app.get('/api/umami/dashboard', async (req, res) => {
         const leadEvents = allEvents.filter(e => e.eventName && e.eventName.toLowerCase().includes('lead'));
         const totalLeads = leadEvents.length;
         const leadsChange = '0'; // prev leva tempo, simplificamos aqui
-        const visitors = cur.visitors?.value || 0;
+        const visitors = cur.visitors || 0;
         const convRate = visitors > 0 ? ((totalLeads / visitors) * 100).toFixed(2) + '%' : '0%';
 
         // Pageviews timeseries
@@ -1631,9 +1631,9 @@ app.get('/api/umami/dashboard', async (req, res) => {
         res.json({
             success: true,
             kpis: {
-                visitors, visitorsChange: calcChange(visitors, prv.visitors?.value || 0),
-                visits: cur.visits?.value || 0, visitsChange: calcChange(cur.visits?.value || 0, prv.visits?.value || 0),
-                pageviews: cur.pageviews?.value || 0, pageviewsChange: calcChange(cur.pageviews?.value || 0, prv.pageviews?.value || 0),
+                visitors, visitorsChange: calcChange(visitors, prv.visitors || 0),
+                visits: cur.visits || 0, visitsChange: calcChange(cur.visits || 0, prv.visits || 0),
+                pageviews: cur.pageviews || 0, pageviewsChange: calcChange(cur.pageviews || 0, prv.pageviews || 0),
                 totalLeads, leadsChange,
                 convRate,
                 bounceRate,

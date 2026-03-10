@@ -1411,27 +1411,27 @@ app.get('/api/umami/stats', async (req, res) => {
         ]);
         // Calcular variações %
         const calcChange = (cur, prv) => prv > 0 ? (((cur - prv) / prv) * 100).toFixed(1) : '0';
-        const avgTime = current.visits?.value > 0
-            ? Math.round((current.totaltime?.value || 0) / current.visits.value)
+        const avgTime = current.visits > 0
+            ? Math.round((current.totaltime || 0) / current.visits)
             : 0;
-        const avgTimePrev = prev.visits?.value > 0
-            ? Math.round((prev.totaltime?.value || 0) / prev.visits.value)
+        const avgTimePrev = prev.visits > 0
+            ? Math.round((prev.totaltime || 0) / prev.visits)
             : 0;
-        const bounceRate = current.visits?.value > 0
-            ? ((current.bounces?.value || 0) / current.visits.value * 100).toFixed(1) + '%'
+        const bounceRate = current.visits > 0
+            ? ((current.bounces || 0) / current.visits * 100).toFixed(1) + '%'
             : '0%';
         const result = {
-            visitors: current.visitors?.value || 0,
-            visitorsChange: calcChange(current.visitors?.value || 0, prev.visitors?.value || 0),
-            visits: current.visits?.value || 0,
-            visitsChange: calcChange(current.visits?.value || 0, prev.visits?.value || 0),
-            pageviews: current.pageviews?.value || 0,
-            pageviewsChange: calcChange(current.pageviews?.value || 0, prev.pageviews?.value || 0),
+            visitors: current.visitors || 0,
+            visitorsChange: calcChange(current.visitors || 0, prev.visitors || 0),
+            visits: current.visits || 0,
+            visitsChange: calcChange(current.visits || 0, prev.visits || 0),
+            pageviews: current.pageviews || 0,
+            pageviewsChange: calcChange(current.pageviews || 0, prev.pageviews || 0),
             bounceRate,
             avgTime: `${String(Math.floor(avgTime / 60)).padStart(2, '0')}:${String(avgTime % 60).padStart(2, '0')}`,
             avgTimeChange: calcChange(avgTime, avgTimePrev),
-            bounces: current.bounces?.value || 0,
-            totaltime: current.totaltime?.value || 0,
+            bounces: current.bounces || 0,
+            totaltime: current.totaltime || 0,
         };
         setCache(cacheKey, result);
         res.json({ success: true, data: result });

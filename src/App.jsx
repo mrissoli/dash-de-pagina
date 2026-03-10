@@ -583,6 +583,8 @@ function DashboardScreen({ user, onLogout }) {
   const [umamiWeekly, setUmamiWeekly] = useState(null);
   const [umamiHourly, setUmamiHourly] = useState([]);
   const [umamiLoading, setUmamiLoading] = useState(false);
+  const [umamiUtmData, setUmamiUtmData] = useState([]);
+  const [umamiBrowsers, setUmamiBrowsers] = useState([]);
   const [showUmamiWebsiteMenu, setShowUmamiWebsiteMenu] = useState(false);
 
   const thisYear = new Date().getFullYear();
@@ -767,22 +769,22 @@ function DashboardScreen({ user, onLogout }) {
       try {
         const { startDate, endDate } = selectedDateOption;
         const qs = `websiteId=${selectedUmamiWebsite.id}&dateRange=${startDate}&endDate=${endDate}`;
-        const [dashRes, hourRes, weeklyRes] = await Promise.all([
-          fetch(`${API_BASE}/umami/dashboard?${qs}`),
-          fetch(`${API_BASE}/umami/pageviews?${qs}&unit=hour`),
-          fetch(`${API_BASE}/umami/weekly?websiteId=${selectedUmamiWebsite.id}`),
+        const [dashRes] = await Promise.all([
+          fetch(`${API_BASE}/umami/dashboard?${qs}`)
         ]);
         if (dashRes.ok) {
           const d = await dashRes.json();
           if (d.success) {
             setUmamiKpis(d.kpis);
-            // Timeseries — merge pageviews e sessions por data
+            // Timeseries — merge pageviews, sessions, leads
             const pvMap = {};
-            (d.pageviewsTimeseries?.pageviews || []).forEach(p => { pvMap[p.t] = { date: p.t, pageviews: p.y, sessions: 0 }; });
-            (d.pageviewsTimeseries?.sessions || []).forEach(s => { if (pvMap[s.t]) pvMap[s.t].sessions = s.y; else pvMap[s.t] = { date: s.t, pageviews: 0, sessions: s.y }; });
+            (d.pageviewsTimeseries?.pageviews || []).forEach(p => { pvMap[p.t] = { date: p.t, pageviews: p.y, sessions: 0, leads: 0 }; });
+            (d.pageviewsTimeseries?.sessions || []).forEach(s => { if (pvMap[s.t]) pvMap[s.t].sessions = s.y; else pvMap[s.t] = { date: s.t, pageviews: 0, sessions: s.y, leads: 0 }; });
+            (d.pageviewsTimeseries?.leads || []).forEach(l => { if (pvMap[l.t]) pvMap[l.t].leads = l.y; else pvMap[l.t] = { date: l.t, pageviews: 0, sessions: 0, leads: l.y }; });
+
             const ts = Object.values(pvMap).sort((a, b) => a.date.localeCompare(b.date)).map(item => {
-              const d = new Date(item.date);
-              return { ...item, name: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) };
+              const dateObj = new Date(item.date);
+              return { ...item, name: dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) };
             });
             setUmamiTimeseries(ts);
             setUmamiReferrers(d.referrers || []);
@@ -790,28 +792,23 @@ function DashboardScreen({ user, onLogout }) {
             setUmamiTopUrls(d.topUrls || []);
             setUmamiCountries(d.countries || []);
             setUmamiLeadEvents(d.leadEvents || []);
-          }
-        }
-        if (hourRes.ok) {
-          const h = await hourRes.json();
-          if (h.success && h.data) {
+            setUmamiUtmData(d.utmData || []);
+            setUmamiBrowsers(d.browsers || []);
+
+            // Hourly Parsing
             const hourMap = {};
-            (h.data.pageviews || []).forEach(p => {
+            (d.hourlyPageviews?.pageviews || []).forEach(p => {
               const hr = new Date(p.t).getHours();
               if (!hourMap[hr]) hourMap[hr] = { hour: `${String(hr).padStart(2, '0')}h`, pageviews: 0, sessions: 0 };
               hourMap[hr].pageviews += p.y;
             });
-            (h.data.sessions || []).forEach(s => {
+            (d.hourlyPageviews?.sessions || []).forEach(s => {
               const hr = new Date(s.t).getHours();
               if (!hourMap[hr]) hourMap[hr] = { hour: `${String(hr).padStart(2, '0')}h`, pageviews: 0, sessions: 0 };
               hourMap[hr].sessions += s.y;
             });
             setUmamiHourly(Array.from({ length: 24 }, (_, i) => hourMap[i] || { hour: `${String(i).padStart(2, '0')}h`, pageviews: 0, sessions: 0 }));
           }
-        }
-        if (weeklyRes.ok) {
-          const w = await weeklyRes.json();
-          if (w.success) setUmamiWeekly(w.data);
         }
       } catch (e) { console.warn('Umami fetch error:', e.message); }
       finally { setUmamiLoading(false); }
@@ -1052,7 +1049,7 @@ function DashboardScreen({ user, onLogout }) {
           {/* ===== Tráfego original + Canais ===== */}
           <div className="charts-grid">
             <div className="glass-card">
-              <div className="card-title-row"><span className="card-title">Tráfego (Sessões UMAMI)</span></div>
+              <div className="card-title-row"><span className="card-title">Sessões vs Leads (UMAMI)</span></div>
               <div style={{ height: '280px', width: '100%', position: 'relative' }}>
                 {umamiLoading ? (
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><div className="loader" style={{ borderColor: 'rgba(59,130,246,0.3)', borderTopColor: '#3b82f6' }} /></div>
@@ -1061,12 +1058,15 @@ function DashboardScreen({ user, onLogout }) {
                     <AreaChart data={umamiTimeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorAna" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient>
+                        <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.5} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
                       <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
-                      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="sessions" name="Sessões" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
+                      <Area yAxisId="left" type="monotone" dataKey="sessions" name="Sessões" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
+                      <Area yAxisId="right" type="monotone" dataKey="leads" name="Leads" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorLeads)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1152,10 +1152,10 @@ function DashboardScreen({ user, onLogout }) {
             </div>
           </div>
           {/* ===== Conversão UTM / Campanha ===== */}
-          <div className="glass-card" style={{ margin: '0', display: 'none' }}>
+          <div className="glass-card" style={{ margin: '0' }}>
             <div className="card-title-row"><span className="card-title">Conversão por UTM / Campanha</span></div>
             <div style={{ overflowX: 'auto' }}>
-              {conversionData.utmData && conversionData.utmData.length > 0 ? (
+              {umamiUtmData && umamiUtmData.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
@@ -1165,14 +1165,14 @@ function DashboardScreen({ user, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {conversionData.utmData.map((row, i) => (
+                    {umamiUtmData.map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                         <td style={{ padding: '10px 8px', fontSize: '13px', fontWeight: 600 }}>{row.source}</td>
                         <td style={{ padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.campaign}</td>
                         <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px' }}>{row.sessions.toLocaleString('pt-BR')}</td>
                         <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', fontWeight: 700, color: '#10b981' }}>{row.leads}</td>
                         <td style={{ textAlign: 'right', padding: '10px 8px' }}>
-                          <span style={{ background: parseFloat(row.rate) > 5 ? 'rgba(16,185,129,0.15)' : parseFloat(row.rate) > 2 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.1)', color: parseFloat(row.rate) > 5 ? '#10b981' : parseFloat(row.rate) > 2 ? '#f59e0b' : '#ef4444', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{row.rate}</span>
+                          <span style={{ background: parseFloat(row.rate) > 5 ? 'rgba(16,185,129,0.15)' : parseFloat(row.rate) > 2 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.1)', color: parseFloat(row.rate) > 5 ? '#10b981' : parseFloat(row.rate) > 2 ? '#f59e0b' : '#ef4444', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{row.rate}%</span>
                         </td>
                       </tr>
                     ))}
@@ -1180,24 +1180,24 @@ function DashboardScreen({ user, onLogout }) {
                 </table>
               ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão UTM. Configure o evento "lead" no GA4 e use parâmetros UTM nos seus anúncios.</div>}
             </div>
-          </div >
+          </div>
 
           {/* ===== Horas de Pico + Mobile vs Desktop Conversão ===== */}
-          < div className="charts-grid" style={{ display: 'none' }}>
+          <div className="charts-grid">
             <div className="glass-card">
-              <div className="card-title-row"><span className="card-title">Horas de Pico de Conversão</span></div>
+              <div className="card-title-row"><span className="card-title">Distribuição por Hora do Dia</span></div>
               <div style={{ height: '260px' }}>
-                {conversionData.hourlyData && conversionData.hourlyData.length > 0 ? (
+                {umamiHourly && umamiHourly.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={conversionData.hourlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <BarChart data={umamiHourly} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
                       <XAxis dataKey="hour" stroke="var(--text-secondary)" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={2} />
                       <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                       <Bar dataKey="sessions" name="Sessões" radius={[3, 3, 0, 0]} barSize={14}>
-                        {(conversionData.hourlyData || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        {(umamiHourly || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Bar>
-                      <Bar dataKey="leads" name="Leads" radius={[3, 3, 0, 0]} barSize={8} fill="#10b981" />
+                      <Bar dataKey="pageviews" name="Pageviews" radius={[3, 3, 0, 0]} barSize={8} fill="#10b981" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados horários.</div>}
@@ -1207,24 +1207,24 @@ function DashboardScreen({ user, onLogout }) {
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Conversão Mobile vs Desktop</span></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-                {conversionData.deviceConv && conversionData.deviceConv.length > 0 ? conversionData.deviceConv.map((d, i) => {
-                  const DevIcon = d.device === 'Mobile' ? Smartphone : d.device === 'Desktop' ? Monitor : Tablet;
-                  const color = DEVICE_COLORS[d.device] || COLORS[i % COLORS.length];
-                  const rate = parseFloat(d.rate);
+                {umamiDevices && umamiDevices.length > 0 ? umamiDevices.map((d, i) => {
+                  const DevIcon = d.x === 'mobile' ? Smartphone : d.x === 'desktop' ? Monitor : Tablet;
+                  const color = DEVICE_COLORS[d.x] || COLORS[i % COLORS.length];
+                  const rate = parseFloat(d.convRate);
                   return (
                     <div key={i} style={{ background: `${color}10`, border: `1px solid ${color}25`, borderRadius: '12px', padding: '14px 18px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <DevIcon size={18} color={color} />
-                          <span style={{ fontWeight: 600, fontSize: '14px' }}>{d.device}</span>
+                          <span style={{ fontWeight: 600, fontSize: '14px', textTransform: 'capitalize' }}>{d.x}</span>
                         </div>
-                        <span style={{ fontSize: '22px', fontWeight: 800, color }}>{d.rate}%</span>
+                        <span style={{ fontSize: '22px', fontWeight: 800, color }}>{d.convRate}%</span>
                       </div>
                       <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
                         <div style={{ height: '100%', width: `${Math.min(rate * 10, 100)}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
                       </div>
                       <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        <span>{d.sessions.toLocaleString('pt-BR')} sessões</span>
+                        <span>{(d.y || 0).toLocaleString('pt-BR')} sessões</span>
                         <span><strong style={{ color }}>{d.leads}</strong> leads</span>
                       </div>
                     </div>
@@ -1232,22 +1232,22 @@ function DashboardScreen({ user, onLogout }) {
                 }) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão por dispositivo.</div>}
               </div>
             </div>
-          </div >
+          </div>
 
           {/* ===== NOVA LINHA: Navegadores + Mapa Países ===== */}
-          < div className="charts-grid" style={{ display: 'none' }}>
+          <div className="charts-grid">
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Navegadores</span></div>
               <div style={{ height: '300px', width: '100%' }}>
-                {browsersData.length > 0 ? (
+                {umamiBrowsers && umamiBrowsers.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={browsersData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <BarChart data={umamiBrowsers} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
-                      <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="x" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                      <Bar dataKey="value" name="Sessões" radius={[4, 4, 0, 0]} barSize={28}>
-                        {browsersData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      <Bar dataKey="y" name="Sessões" radius={[4, 4, 0, 0]} barSize={28}>
+                        {umamiBrowsers.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -1258,29 +1258,27 @@ function DashboardScreen({ user, onLogout }) {
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Mapa de Usuários por País</span></div>
               <div style={{ maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
-                {countriesData.length > 0 ? (
+                {umamiCountries && umamiCountries.length > 0 ? (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--surface-border)', position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1 }}>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>PAÍS</th>
-                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>USUÁRIOS</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>SESSÕES</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {countriesData.map((c, i) => {
-                        const maxUsers = countriesData[0]?.users || 1;
-                        const pct = ((c.users / maxUsers) * 100).toFixed(0);
+                      {umamiCountries.map((c, i) => {
+                        const maxUsers = umamiCountries[0]?.y || 1;
+                        const pct = ((c.y / maxUsers) * 100).toFixed(0);
                         return (
                           <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td style={{ padding: '10px 8px', fontSize: '13px', fontWeight: 500 }}>
-                              {c.country}
+                              {c.x}
                               <div style={{ marginTop: '4px', height: '3px', borderRadius: '2px', background: 'rgba(59, 130, 246, 0.15)', width: '100%' }}>
                                 <div style={{ height: '100%', borderRadius: '2px', background: '#3b82f6', width: `${pct}%`, transition: 'width 0.5s ease' }}></div>
                               </div>
                             </td>
-                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', fontWeight: 600 }}>{c.users}</td>
-                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', color: 'var(--text-secondary)' }}>{c.sessions}</td>
+                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', fontWeight: 600 }}>{c.y.toLocaleString('pt-BR')}</td>
                           </tr>
                         );
                       })}
@@ -1289,37 +1287,42 @@ function DashboardScreen({ user, onLogout }) {
                 ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Sem dados de países.</div>}
               </div>
             </div>
-          </div >
+          </div>
 
           {/* ===== Ranking de Páginas ===== */}
-          < div className="glass-card" style={{ margin: '0', display: 'none' }}>
+          <div className="glass-card" style={{ margin: '0' }}>
             <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
             <div style={{ overflowX: 'auto' }}>
-              {topPagesData.length > 0 ? (
+              {umamiTopUrls && umamiTopUrls.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
                       <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>#</th>
                       <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>PÁGINA</th>
                       <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>VISUALIZAÇÕES</th>
-                      <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>TEMPO MÉDIO</th>
+                      <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>LEADS</th>
+                      <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>CONVERSÃO</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {topPagesData.map((page, i) => {
-                      const maxViews = topPagesData[0]?.views || 1;
-                      const pct = ((page.views / maxViews) * 100).toFixed(0);
+                    {umamiTopUrls.map((page, i) => {
+                      const maxViews = umamiTopUrls[0]?.y || 1;
+                      const pct = ((page.y / maxViews) * 100).toFixed(0);
+                      const rate = parseFloat(page.convRate);
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                           <td style={{ padding: '12px 8px', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>{i + 1}</td>
                           <td style={{ padding: '12px 8px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>{page.path}</div>
+                            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>{page.x}</div>
                             <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(99, 102, 241, 0.15)', width: '100%' }}>
                               <div style={{ height: '100%', borderRadius: '2px', background: COLORS[i % COLORS.length], width: `${pct}%`, transition: 'width 0.5s ease' }}></div>
                             </div>
                           </td>
-                          <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '14px', fontWeight: 600 }}>{page.views.toLocaleString('pt-BR')}</td>
-                          <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '13px', color: 'var(--text-secondary)' }}>{page.time}</td>
+                          <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '14px', fontWeight: 600 }}>{page.y.toLocaleString('pt-BR')}</td>
+                          <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '13px', fontWeight: 700, color: '#10b981' }}>{page.leads}</td>
+                          <td style={{ textAlign: 'right', padding: '12px 8px' }}>
+                            <span style={{ background: rate > 5 ? 'rgba(16,185,129,0.15)' : rate > 2 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.1)', color: rate > 5 ? '#10b981' : rate > 2 ? '#f59e0b' : '#ef4444', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{page.convRate}%</span>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1327,7 +1330,7 @@ function DashboardScreen({ user, onLogout }) {
                 </table>
               ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Sem dados de páginas.</div>}
             </div>
-          </div >
+          </div>
 
         </div >
       </main >}

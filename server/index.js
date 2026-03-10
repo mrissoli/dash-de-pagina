@@ -1582,7 +1582,7 @@ app.get('/api/umami/dashboard', async (req, res) => {
         const prevStart = startAt - duration;
         const prevEnd = startAt - 1;
 
-        const [stats, prevStats, pageviews, events, referrers, devices, urls, countries] = await Promise.allSettled([
+        const [stats, prevStats, pageviews, events, referrers, devices, urls, countries, queryMetrics, browser, hourlyPageviews] = await Promise.allSettled([
             umamiRequest(`/api/websites/${websiteId}/stats`, { startAt, endAt }),
             umamiRequest(`/api/websites/${websiteId}/stats`, { startAt: prevStart, endAt: prevEnd }),
             umamiRequest(`/api/websites/${websiteId}/pageviews`, { startAt, endAt, unit: 'day', timezone: 'America/Sao_Paulo' }),
@@ -1591,6 +1591,9 @@ app.get('/api/umami/dashboard', async (req, res) => {
             umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'device', limit: 10 }),
             umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'url', limit: 20 }),
             umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'country', limit: 15 }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'query', limit: 50 }),
+            umamiRequest(`/api/websites/${websiteId}/metrics`, { startAt, endAt, type: 'browser', limit: 10 }),
+            umamiRequest(`/api/websites/${websiteId}/pageviews`, { startAt, endAt, unit: 'hour', timezone: 'America/Sao_Paulo' }),
         ]);
 
         const cur = stats.status === 'fulfilled' ? stats.value : {};
@@ -1613,20 +1616,83 @@ app.get('/api/umami/dashboard', async (req, res) => {
         const visitors = cur.visitors || 0;
         const convRate = visitors > 0 ? ((totalLeads / visitors) * 100).toFixed(2) + '%' : '0%';
 
-        // Pageviews timeseries
+        // Pageviews timeseries + Leads timeseries (Sessões vs Leads)
         const pvData = pageviews.status === 'fulfilled' ? pageviews.value : {};
+        if (pvData.pageviews && pvData.sessions) {
+            // Group leadEvents by day (YYYY-MM-DD)
+            const leadsByDay = {};
+            leadEvents.forEach(e => {
+                const day = new Date(e.createdAt).toLocaleDateString('pt-BR');
+                leadsByDay[day] = (leadsByDay[day] || 0) + 1;
+            });
+            pvData.leads = pvData.sessions.map((s, i) => {
+                const day = new Date(pvData.pageviews[i].t).toLocaleDateString('pt-BR');
+                return { t: s.t, y: leadsByDay[day] || 0 };
+            });
+        }
+
+        const hourlyPvData = hourlyPageviews.status === 'fulfilled' ? hourlyPageviews.value : {};
 
         // Referrers
         const referrersData = referrers.status === 'fulfilled' ? (Array.isArray(referrers.value) ? referrers.value : []) : [];
 
-        // Devices
-        const devicesData = devices.status === 'fulfilled' ? (Array.isArray(devices.value) ? devices.value : []) : [];
+        // Browsers
+        const browsersData = browser.status === 'fulfilled' ? (Array.isArray(browser.value) ? browser.value : []) : [];
 
-        // URLs/Páginas
-        const urlsData = urls.status === 'fulfilled' ? (Array.isArray(urls.value) ? urls.value : []) : [];
+        // Devices (Conversão por dispositivo)
+        const devicesBase = devices.status === 'fulfilled' ? (Array.isArray(devices.value) ? devices.value : []) : [];
+        const devicesData = devicesBase.map(d => {
+            const devLeads = leadEvents.filter(e => e.device === d.x).length;
+            return {
+                x: d.x,
+                y: d.y,
+                leads: devLeads,
+                convRate: d.y > 0 ? ((devLeads / d.y) * 100).toFixed(1) : '0.0'
+            };
+        });
+
+        // URLs/Páginas (Ranking com conversão)
+        const urlsBase = urls.status === 'fulfilled' ? (Array.isArray(urls.value) ? urls.value : []) : [];
+        const urlsData = urlsBase.map(u => {
+            const pathLeads = leadEvents.filter(e => e.urlPath === u.x).length;
+            return {
+                x: u.x,
+                y: u.y,
+                leads: pathLeads,
+                convRate: u.y > 0 ? ((pathLeads / u.y) * 100).toFixed(1) : '0.0'
+            };
+        });
 
         // Países
         const countriesData = countries.status === 'fulfilled' ? (Array.isArray(countries.value) ? countries.value : []) : [];
+
+        // UTMs / Campanha (Query parsing)
+        const queryData = queryMetrics.status === 'fulfilled' ? (Array.isArray(queryMetrics.value) ? queryMetrics.value : []) : [];
+        const utmMap = {};
+        queryData.forEach(q => {
+            // q.x is full query string "utm_source=Meta-Ads&utm_campaign=XYZ"
+            const params = new URLSearchParams(q.x);
+            const source = params.get('utm_source') || '(direct)';
+            const campaign = params.get('utm_campaign') || '(none)';
+            const key = `${source}|${campaign}`;
+
+            if (!utmMap[key]) utmMap[key] = { source, campaign, sessions: 0, leads: 0 };
+            utmMap[key].sessions += q.y;
+        });
+
+        leadEvents.forEach(e => {
+            const params = new URLSearchParams(e.urlQuery);
+            const source = params.get('utm_source') || '(direct)';
+            const campaign = params.get('utm_campaign') || '(none)';
+            const key = `${source}|${campaign}`;
+            if (utmMap[key]) utmMap[key].leads++;
+            // Note: If a lead doesn't match a query in queryMetrics top 50, it might be missed, but robust enough.
+        });
+
+        const utmData = Object.values(utmMap)
+            .map(u => ({ ...u, rate: u.sessions > 0 ? ((u.leads / u.sessions) * 100).toFixed(1) : '0.0' }))
+            .sort((a, b) => b.sessions - a.sessions);
+
 
         res.json({
             success: true,
@@ -1641,11 +1707,14 @@ app.get('/api/umami/dashboard', async (req, res) => {
                 avgTimeChange: calcChange(avgTime, avgTimePrev),
             },
             pageviewsTimeseries: pvData,
+            hourlyPageviews: hourlyPvData,
             referrers: referrersData,
             devices: devicesData,
+            browsers: browsersData,
             topUrls: urlsData,
             countries: countriesData,
-            leadEvents: leadEvents.slice(0, 100),
+            utmData: utmData,
+            leadEvents: leadEvents.slice(0, 50), // Send some leads for feed/properties
         });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

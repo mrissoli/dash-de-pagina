@@ -977,65 +977,18 @@ function DashboardScreen({ user, onLogout }) {
         <div className="dashboard">
           <div className="metrics-grid">
             <MetricCard title="Usuários Ao Vivo" value={realtimeUsers !== null ? realtimeUsers : '...'} icon={Activity} colorClass="icon-green" isLive={true} />
-            <MetricCard title="Total de Sessões (GA)" value={metrics.totalVisitsGA} change="-" trend="up" icon={Users} colorClass="icon-blue" />
-            <MetricCard title="Tempo Médio na Página" value={metrics.avgTimeGA || '00:00'} change="-" trend="up" icon={Clock} colorClass="icon-purple" />
-            <MetricCard title="Usuários (Clarity)" value={metrics.activeUsersClarity} change="-" trend="up" icon={MonitorPlay} colorClass="icon-orange" />
+            <MetricCard title="Visitantes Únicos" value={umamiKpis?.visitors?.toLocaleString('pt-BR') || 0} change={`${parseFloat(umamiKpis?.visitorsChange || 0) > 0 ? '+' : ''}${umamiKpis?.visitorsChange || '0'}%`} trend={parseFloat(umamiKpis?.visitorsChange || 0) >= 0 ? "up" : "down"} icon={Users} colorClass="icon-blue" />
+            <MetricCard title="Total de Sessões" value={umamiKpis?.visits?.toLocaleString('pt-BR') || 0} change={`${parseFloat(umamiKpis?.visitsChange || 0) > 0 ? '+' : ''}${umamiKpis?.visitsChange || '0'}%`} trend={parseFloat(umamiKpis?.visitsChange || 0) >= 0 ? "up" : "down"} icon={Activity} colorClass="icon-purple" />
+            <MetricCard title="Taxa de Conversão" value={umamiKpis?.convRate || '0%'} change={null} trend="up" icon={TrendingUp} colorClass="icon-green" subValue='Leads / Visitantes Únicos' />
           </div>
           <div className="metrics-grid" style={{ marginTop: '16px' }}>
-            <MetricCard title="Novos Usuários (GA)" value={metrics.newUsersGA} change="-" trend="up" icon={Users} colorClass="icon-blue" />
-            <MetricCard title="Taxa de Conversão" value={conversionData.conversionRate} change="-" trend="up" icon={TrendingUp} colorClass="icon-green" />
-            {/* Rage Clicks */}
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Rage Clicks (Clarity)</span>
-                <div className="metric-icon icon-orange"><MousePointer2 size={20} /></div>
-              </div>
-              <span className="metric-value">{rageClickData.rageClicks}</span>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Dead clicks: <strong>{rageClickData.deadClicks}</strong></div>
-            </div>
-            {/* PageSpeed */}
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Velocidade da Página</span>
-                <div className="metric-icon icon-purple"><Gauge size={20} /></div>
-              </div>
-              {pageSpeedData ? (
-                <>
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Mobile</div>
-                      <div style={{ fontSize: '28px', fontWeight: 800, color: pageSpeedData.mobile?.score >= 90 ? '#10b981' : pageSpeedData.mobile?.score >= 50 ? '#f59e0b' : '#ef4444' }}>{pageSpeedData.mobile?.score ?? '—'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Desktop</div>
-                      <div style={{ fontSize: '28px', fontWeight: 800, color: pageSpeedData.desktop?.score >= 90 ? '#10b981' : pageSpeedData.desktop?.score >= 50 ? '#f59e0b' : '#ef4444' }}>{pageSpeedData.desktop?.score ?? '—'}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>LCP Mobile: {pageSpeedData.mobile?.lcp}</div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                  {pageSpeedLoading ? <div className="loader" style={{ borderColor: 'rgba(139,92,246,0.3)', borderTopColor: '#8b5cf6', width: '20px', height: '20px' }} /> : (
-                    <>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Informe a URL para analisar:</div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <input
-                          placeholder="https://seusite.com.br"
-                          style={{ flex: 1, padding: '6px 10px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
-                          onKeyDown={e => { if (e.key === 'Enter') setPageSpeedUrl(e.target.value); }}
-                          defaultValue={pageSpeedUrl}
-                        />
-                        <button onClick={e => { const inp = e.currentTarget.previousSibling; setPageSpeedUrl(inp.value); }} style={{ padding: '6px 10px', background: 'var(--accent-color)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>OK</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            <MetricCard title="Total de Leads" value={umamiKpis?.totalLeads?.toLocaleString('pt-BR') || 0} change={`${parseFloat(umamiKpis?.leadsChange || 0) > 0 ? '+' : ''}${umamiKpis?.leadsChange || '0'}%`} trend={parseFloat(umamiKpis?.leadsChange || 0) >= 0 ? "up" : "down"} icon={TrendingUp} colorClass="icon-green" subValue='Eventos c/ "lead"' />
+            <MetricCard title="Tempo Médio" value={umamiKpis?.avgTime || '00:00'} change={`${parseFloat(umamiKpis?.avgTimeChange || 0) > 0 ? '+' : ''}${umamiKpis?.avgTimeChange || '0'}%`} trend={parseFloat(umamiKpis?.avgTimeChange || 0) >= 0 ? "up" : "down"} icon={Clock} colorClass="icon-purple" />
+            <MetricCard title="Pageviews" value={umamiKpis?.pageviews?.toLocaleString('pt-BR') || 0} change={`${parseFloat(umamiKpis?.pageviewsChange || 0) > 0 ? '+' : ''}${umamiKpis?.pageviewsChange || '0'}%`} trend={parseFloat(umamiKpis?.pageviewsChange || 0) >= 0 ? "up" : "down"} icon={BarChart3} colorClass="icon-blue" />
           </div>
 
           {/* ===== Sessões vs Leads + Funil ===== */}
-          <div className="charts-grid">
+          <div className="charts-grid" style={{ display: 'none' }}>
             {/* Linha: Sessões vs Leads */}
             <div className="glass-card">
               <div className="card-title-row">
@@ -1099,13 +1052,13 @@ function DashboardScreen({ user, onLogout }) {
           {/* ===== Tráfego original + Canais ===== */}
           <div className="charts-grid">
             <div className="glass-card">
-              <div className="card-title-row"><span className="card-title">Tráfego (Sessões Diárias)</span></div>
+              <div className="card-title-row"><span className="card-title">Tráfego (Sessões UMAMI)</span></div>
               <div style={{ height: '280px', width: '100%', position: 'relative' }}>
-                {isLoading ? (
+                {umamiLoading ? (
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><div className="loader" style={{ borderColor: 'rgba(59,130,246,0.3)', borderTopColor: '#3b82f6' }} /></div>
-                ) : trafficData.length > 0 ? (
+                ) : umamiTimeseries.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trafficData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <AreaChart data={umamiTimeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorAna" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient>
                       </defs>
@@ -1113,36 +1066,38 @@ function DashboardScreen({ user, onLogout }) {
                       <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
                       <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="analytics" name="Sessões (GA)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
+                      <Area type="monotone" dataKey="sessions" name="Sessões" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAna)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Nenhum dado.</div>
+                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Nenhum dado do Umami.</div>
                 )}
               </div>
             </div>
 
             <div className="glass-card">
-              <div className="card-title-row"><span className="card-title">Canais de Origem</span></div>
+              <div className="card-title-row"><span className="card-title">Canais de Origem (UMAMI)</span></div>
               <div style={{ height: '280px', width: '100%' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={sourcesData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                    <Bar dataKey="value" name="Acessos" radius={[0, 4, 4, 0]} barSize={20}>
-                      {sourcesData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {umamiReferrers.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={umamiReferrers.slice(0, 8).map(r => ({ name: r.x || '(direct)', value: r.y }))} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={80} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                      <Bar dataKey="value" name="Acessos" radius={[0, 4, 4, 0]} barSize={20}>
+                        {umamiReferrers.slice(0, 8).map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Nenhum dado do Umami.</div>}
               </div>
             </div>
           </div>
 
           {/* ===== NOVA LINHA: Eventos + Dispositivos ===== */}
           <div className="charts-grid">
-            <div className="glass-card">
+            <div className="glass-card" style={{ display: 'none' }}>
               <div className="card-title-row"><span className="card-title">Eventos (GA4)</span></div>
               <div style={{ height: '300px', width: '100%' }}>
                 {eventsData.length > 0 ? (
@@ -1162,46 +1117,42 @@ function DashboardScreen({ user, onLogout }) {
             </div>
 
             <div className="glass-card">
-              <div className="card-title-row"><span className="card-title">Sessões por Dispositivo</span></div>
+              <div className="card-title-row"><span className="card-title">Sessões por Dispositivo (UMAMI)</span></div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '12px 0' }}>
-                {devicesData.length > 0 ? (
-                  <>
-                    <div style={{ width: '100%', height: '220px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={devicesData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={5} dataKey="value" nameKey="name" stroke="none">
-                            {devicesData.map((entry, i) => <Cell key={i} fill={DEVICE_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip />} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      {devicesData.map((d, i) => {
-                        const total = devicesData.reduce((s, x) => s + x.value, 0);
-                        const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0';
-                        const DevIcon = d.name === 'Mobile' ? Smartphone : d.name === 'Desktop' ? Monitor : Tablet;
-                        const color = DEVICE_COLORS[d.name] || COLORS[i % COLORS.length];
-                        return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', borderRadius: '10px', background: `${color}15`, border: `1px solid ${color}30` }}>
-                            <DevIcon size={18} color={color} />
-                            <div>
-                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{d.name}</div>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color }}>{pct}%</div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.value.toLocaleString('pt-BR')} sess.</div>
+                {umamiDevices.length > 0 ? (() => {
+                  const total = umamiDevices.reduce((s, d) => s + (d.y || 0), 0);
+                  return (
+                    <>
+                      <div style={{ width: '100%', height: '220px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={umamiDevices} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={5} dataKey="y" nameKey="x" stroke="none">
+                              {umamiDevices.map((entry, i) => <Cell key={i} fill={DEVICE_COLORS[entry.x] || COLORS[i % COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {umamiDevices.map((d, i) => {
+                          const pct = total > 0 ? ((d.y / total) * 100).toFixed(1) : 0;
+                          const DevIcon = d.x === 'mobile' ? Smartphone : d.x === 'desktop' ? Monitor : Tablet;
+                          return (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <DevIcon size={14} color={DEVICE_COLORS[d.x] || COLORS[i % COLORS.length]} />
+                              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{d.x}: <strong style={{ color: 'var(--text-primary)' }}>{pct}%</strong></span>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : <div style={{ color: 'var(--text-secondary)', padding: '40px' }}>Sem dados de dispositivos.</div>}
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })() : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Sem dados do Umami.</div>}
               </div>
             </div>
           </div>
-
           {/* ===== Conversão UTM / Campanha ===== */}
-          <div className="glass-card" style={{ margin: '0' }}>
+          <div className="glass-card" style={{ margin: '0', display: 'none' }}>
             <div className="card-title-row"><span className="card-title">Conversão por UTM / Campanha</span></div>
             <div style={{ overflowX: 'auto' }}>
               {conversionData.utmData && conversionData.utmData.length > 0 ? (
@@ -1229,10 +1180,10 @@ function DashboardScreen({ user, onLogout }) {
                 </table>
               ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão UTM. Configure o evento "lead" no GA4 e use parâmetros UTM nos seus anúncios.</div>}
             </div>
-          </div>
+          </div >
 
           {/* ===== Horas de Pico + Mobile vs Desktop Conversão ===== */}
-          <div className="charts-grid">
+          < div className="charts-grid" style={{ display: 'none' }}>
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Horas de Pico de Conversão</span></div>
               <div style={{ height: '260px' }}>
@@ -1281,10 +1232,10 @@ function DashboardScreen({ user, onLogout }) {
                 }) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de conversão por dispositivo.</div>}
               </div>
             </div>
-          </div>
+          </div >
 
           {/* ===== NOVA LINHA: Navegadores + Mapa Países ===== */}
-          <div className="charts-grid">
+          < div className="charts-grid" style={{ display: 'none' }}>
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Navegadores</span></div>
               <div style={{ height: '300px', width: '100%' }}>
@@ -1338,10 +1289,10 @@ function DashboardScreen({ user, onLogout }) {
                 ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Sem dados de países.</div>}
               </div>
             </div>
-          </div>
+          </div >
 
           {/* ===== Ranking de Páginas ===== */}
-          <div className="glass-card" style={{ margin: '0' }}>
+          < div className="glass-card" style={{ margin: '0', display: 'none' }}>
             <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
             <div style={{ overflowX: 'auto' }}>
               {topPagesData.length > 0 ? (
@@ -1376,422 +1327,426 @@ function DashboardScreen({ user, onLogout }) {
                 </table>
               ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Sem dados de páginas.</div>}
             </div>
-          </div>
+          </div >
 
-        </div>
-      </main>}
+        </div >
+      </main >}
 
       {/* ===== ABA: ANALYTICS BASE (UMAMI) ===== */}
-      {activeNav === 'analytics' && <main className="main-content">
-        <header className="header">
-          <div className="header-title">
-            <h1>Analytics Base</h1>
-            <p>{umamiConfigured ? `Dados precisos via Umami — sem sampling, sem ad blockers` : 'Configure o Umami para ver dados detalhados'}</p>
-          </div>
-          <div className="header-actions">
-            {umamiConfigured && (
-              <div className="date-picker" style={{ background: selectedUmamiWebsite ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', cursor: 'default', userSelect: 'none', marginRight: '8px' }}>
-                <BarChart3 size={16} color={selectedUmamiWebsite ? "#10b981" : "#ef4444"} />
-                <span style={{ color: selectedUmamiWebsite ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                  {selectedUmamiWebsite ? selectedUmamiWebsite.name : 'Nenhum site vinculado'}
-                </span>
+      {
+        activeNav === 'analytics' && <main className="main-content">
+          <header className="header">
+            <div className="header-title">
+              <h1>Analytics Base</h1>
+              <p>{umamiConfigured ? `Dados precisos via Umami — sem sampling, sem ad blockers` : 'Configure o Umami para ver dados detalhados'}</p>
+            </div>
+            <div className="header-actions">
+              {umamiConfigured && (
+                <div className="date-picker" style={{ background: selectedUmamiWebsite ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', cursor: 'default', userSelect: 'none', marginRight: '8px' }}>
+                  <BarChart3 size={16} color={selectedUmamiWebsite ? "#10b981" : "#ef4444"} />
+                  <span style={{ color: selectedUmamiWebsite ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                    {selectedUmamiWebsite ? selectedUmamiWebsite.name : 'Nenhum site vinculado'}
+                  </span>
+                </div>
+              )}
+              <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
+                <Calendar size={16} color="var(--text-secondary)" />
+                <span>{selectedDateOption?.label}</span>
+                <ChevronDown size={16} color="var(--text-secondary)" />
+                {showDateMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                    {dateOptions.map(opt => (
+                      <div key={opt.value} onClick={e => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? 700 : 400, background: dateRange === opt.value ? 'rgba(99,102,241,0.1)' : 'transparent' }}>
+                        {opt.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            <div className="date-picker" onClick={() => setShowDateMenu(!showDateMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
-              <Calendar size={16} color="var(--text-secondary)" />
-              <span>{selectedDateOption?.label}</span>
-              <ChevronDown size={16} color="var(--text-secondary)" />
-              {showDateMenu && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-                  {dateOptions.map(opt => (
-                    <div key={opt.value} onClick={e => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
-                      style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? 700 : 400, background: dateRange === opt.value ? 'rgba(99,102,241,0.1)' : 'transparent' }}>
-                      {opt.label}
+            </div>
+          </header>
+
+          {!umamiConfigured ? (
+            <div className="dashboard">
+              <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
+                <div style={{ fontSize: '52px', marginBottom: '16px' }}>📊</div>
+                <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Umami não configurado</div>
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
+                  Preencha <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_URL</code>, <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_USERNAME</code> e <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_PASSWORD</code> no arquivo <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>server/.env</code>.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', maxWidth: '680px', margin: '0 auto' }}>
+                  {[
+                    { icon: '🚫', title: 'Sem ad blockers', desc: 'Não é bloqueado por extensões de privacidade' },
+                    { icon: '🍪', title: 'Sem cookies', desc: 'Compliance com LGPD — sem consent banner' },
+                    { icon: '📈', title: 'Sem sampling', desc: '100% dos dados reais, sem amostragem' },
+                    { icon: '🔒', title: 'Self-hosted', desc: 'Seus dados no seu servidor' },
+                  ].map((f, i) => (
+                    <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '12px', padding: '16px', border: '1px solid var(--surface-border)', textAlign: 'left' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>{f.icon}</div>
+                      <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{f.title}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{f.desc}</div>
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          ) : !selectedUmamiWebsite ? (
+            <div className="dashboard">
+              <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
+                <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔗</div>
+                <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Projeto sem Umami vinculado</div>
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
+                  Este projeto ({selectedProjeto?.nome}) ainda não possui um <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>Umami Website ID</code> configurado.
+                </div>
+                <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', padding: '16px', borderRadius: '12px', display: 'inline-block', textAlign: 'left', maxWidth: '400px' }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 600 }}>Como resolver:</p>
+                  <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    <li style={{ marginBottom: '6px' }}>Vá na aba <strong>Admin</strong></li>
+                    <li style={{ marginBottom: '6px' }}>Encontre este projeto e clique em editar (✏️)</li>
+                    <li>Cole o UUID do site que está no painel do Umami</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="dashboard">
+              {/* KPI Cards */}
+              <div className="metrics-grid">
+                {umamiLoading ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="glass-card metric-card" style={{ opacity: 0.4 }}>
+                    <div className="metric-header"><span className="metric-title">Carregando...</span></div>
+                    <span className="metric-value">—</span>
+                  </div>
+                )) : umamiKpis ? (
+                  <>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Visitantes Únicos</span><div className="metric-icon icon-blue"><Users size={20} /></div></div>
+                      <span className="metric-value">{umamiKpis.visitors?.toLocaleString('pt-BR')}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                        {parseFloat(umamiKpis.visitorsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                        <span style={{ color: parseFloat(umamiKpis.visitorsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitorsChange}%</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                      </div>
+                    </div>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Total de Sessões</span><div className="metric-icon icon-purple"><Activity size={20} /></div></div>
+                      <span className="metric-value">{umamiKpis.visits?.toLocaleString('pt-BR')}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                        {parseFloat(umamiKpis.visitsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                        <span style={{ color: parseFloat(umamiKpis.visitsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitsChange}%</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                      </div>
+                    </div>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Total de Leads</span><div className="metric-icon icon-green"><TrendingUp size={20} /></div></div>
+                      <span className="metric-value" style={{ color: '#10b981' }}>{umamiKpis.totalLeads?.toLocaleString('pt-BR')}</span>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Eventos com "lead" no nome</div>
+                    </div>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Taxa de Conversão</span><div className="metric-icon icon-orange"><Gauge size={20} /></div></div>
+                      <span className="metric-value" style={{ color: '#f59e0b' }}>{umamiKpis.convRate}</span>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Leads / Visitantes Únicos</div>
+                    </div>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Tempo Médio</span><div className="metric-icon icon-purple"><Clock size={20} /></div></div>
+                      <span className="metric-value">{umamiKpis.avgTime}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                        {parseFloat(umamiKpis.avgTimeChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                        <span style={{ color: parseFloat(umamiKpis.avgTimeChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.avgTimeChange}%</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                      </div>
+                    </div>
+                    <div className="glass-card metric-card">
+                      <div className="metric-header"><span className="metric-title">Pageviews</span><div className="metric-icon icon-blue"><BarChart3 size={20} /></div></div>
+                      <span className="metric-value">{umamiKpis.pageviews?.toLocaleString('pt-BR')}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
+                        {parseFloat(umamiKpis.pageviewsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
+                        <span style={{ color: parseFloat(umamiKpis.pageviewsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.pageviewsChange}%</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              {/* Timeseries + Referrers */}
+              <div className="charts-grid">
+                <div className="glass-card">
+                  <div className="card-title-row"><span className="card-title">Sessões vs Pageviews (Umami)</span></div>
+                  <div style={{ height: '280px' }}>
+                    {Array.isArray(umamiTimeseries) && umamiTimeseries.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={umamiTimeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="gPVU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
+                            <linearGradient id="gSsU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                          <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Area type="monotone" dataKey="pageviews" name="Pageviews" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#gPVU)" />
+                          <Area type="monotone" dataKey="sessions" name="Sessões" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gSsU)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                  </div>
+                </div>
+                <div className="glass-card">
+                  <div className="card-title-row"><span className="card-title">Canais de Origem (Referrers)</span></div>
+                  <div style={{ height: '280px' }}>
+                    {umamiReferrers.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={umamiReferrers.slice(0, 8).map(r => ({ name: r.x || '(direct)', value: r.y }))} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
+                          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                          <Bar dataKey="value" name="Sessões" radius={[0, 4, 4, 0]} barSize={18}>
+                            {umamiReferrers.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Distribuição Horária + Dispositivos */}
+              <div className="charts-grid">
+                <div className="glass-card">
+                  <div className="card-title-row"><span className="card-title">Distribuição por Hora do Dia</span></div>
+                  <div style={{ height: '260px' }}>
+                    {umamiHourly.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={umamiHourly} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+                          <XAxis dataKey="hour" stroke="var(--text-secondary)" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={2} />
+                          <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                          <Bar dataKey="pageviews" name="Pageviews" radius={[3, 3, 0, 0]} barSize={13}>
+                            {umamiHourly.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados horários.</div>}
+                  </div>
+                </div>
+                <div className="glass-card">
+                  <div className="card-title-row"><span className="card-title">Sessões por Dispositivo</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '8px 0' }}>
+                    {umamiDevices.length > 0 ? (() => {
+                      const total = umamiDevices.reduce((s, d) => s + (d.y || 0), 0);
+                      return umamiDevices.map((d, i) => {
+                        const pct = total > 0 ? ((d.y / total) * 100).toFixed(1) : 0;
+                        const DevIcon = d.x === 'mobile' ? Smartphone : d.x === 'desktop' ? Monitor : Tablet;
+                        const color = COLORS[i % COLORS.length];
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <DevIcon size={18} color={color} style={{ flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'capitalize' }}>{d.x}</span>
+                                <span style={{ fontSize: '13px', color }}>{d.y?.toLocaleString('pt-BR')} <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>({pct}%)</span></span>
+                              </div>
+                              <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })() : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Ranking de Páginas */}
+              <div className="glass-card" style={{ margin: 0 }}>
+                <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
+                <div style={{ overflowX: 'auto' }}>
+                  {umamiTopUrls.length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                          {['URL', 'PAGEVIEWS', 'CONVERSÕES'].map(h => <th key={h} style={{ textAlign: h === 'URL' ? 'left' : 'right', padding: '12px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {umamiTopUrls.map((url, i) => {
+                          const leadsForUrl = umamiLeadEvents.filter(e => e.urlPath === url.x).length;
+                          const convUrl = url.y > 0 ? ((leadsForUrl / url.y) * 100).toFixed(1) + '%' : '—';
+                          return (
+                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <td style={{ padding: '10px 8px', fontSize: '12px', fontFamily: 'monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ marginBottom: '4px' }}>{url.x}</div>
+                                <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.12)' }}>
+                                  <div style={{ height: '100%', width: `${((url.y / (umamiTopUrls[0]?.y || 1)) * 100).toFixed(0)}%`, background: '#6366f1', borderRadius: '2px' }} />
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '14px', fontWeight: 700 }}>{url.y?.toLocaleString('pt-BR')}</td>
+                              <td style={{ textAlign: 'right', padding: '10px 8px' }}>
+                                {leadsForUrl > 0 ? <span style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{leadsForUrl} ({convUrl})</span>
+                                  : <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de páginas.</div>}
+                </div>
+              </div>
+
+              {/* Heatmap Semanal */}
+              {umamiWeekly && (
+                <div className="glass-card" style={{ margin: 0 }}>
+                  <div className="card-title-row"><span className="card-title">Heatmap Semanal de Atividade</span></div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Intensidade de sessões por hora e dia da semana</div>
+                  <UmamiWeeklyHeatmap data={umamiWeekly} />
+                </div>
+              )}
+
+              {/* Países */}
+              {umamiCountries.length > 0 && (
+                <div className="glass-card" style={{ margin: 0 }}>
+                  <div className="card-title-row"><span className="card-title">Usuários por País</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {umamiCountries.slice(0, 10).map((c, i) => {
+                      const pct = umamiCountries[0]?.y > 0 ? ((c.y / umamiCountries[0].y) * 100).toFixed(0) : 0;
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontWeight: 600, fontSize: '13px', minWidth: '30px' }}>{c.x}</span>
+                          <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: COLORS[i % COLORS.length], borderRadius: '3px' }} />
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: 700, minWidth: '50px', textAlign: 'right' }}>{c.y?.toLocaleString('pt-BR')}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
-        </header>
+          )}
+        </main>
+      }
 
-        {!umamiConfigured ? (
+      {/* ===== ABA: MAPAS DE CALOR (CLARITY) ===== */}
+      {
+        activeNav === 'clarity' && <main className="main-content">
+          <header className="header">
+            <div className="header-title">
+              <h1>Mapas de Calor & Comportamento</h1>
+              <p>Dados de comportamento real via Microsoft Clarity</p>
+            </div>
+          </header>
           <div className="dashboard">
-            <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
-              <div style={{ fontSize: '52px', marginBottom: '16px' }}>📊</div>
-              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Umami não configurado</div>
-              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
-                Preencha <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_URL</code>, <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_USERNAME</code> e <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>UMAMI_PASSWORD</code> no arquivo <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>server/.env</code>.
+            {/* Métricas de comportamento do Clarity */}
+            <div className="metrics-grid">
+              <div className="glass-card metric-card">
+                <div className="metric-header">
+                  <span className="metric-title">Rage Clicks</span>
+                  <div className="metric-icon icon-orange"><MousePointer2 size={20} /></div>
+                </div>
+                <span className="metric-value">{rageClickData.rageClicks}</span>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários frustrados clicando repetidamente</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', maxWidth: '680px', margin: '0 auto' }}>
+              <div className="glass-card metric-card">
+                <div className="metric-header">
+                  <span className="metric-title">Dead Clicks</span>
+                  <div className="metric-icon icon-purple"><MousePointerClick size={20} /></div>
+                </div>
+                <span className="metric-value">{rageClickData.deadClicks}</span>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Cliques em elementos não interativos</div>
+              </div>
+              <div className="glass-card metric-card">
+                <div className="metric-header">
+                  <span className="metric-title">Scroll Excessivo</span>
+                  <div className="metric-icon icon-blue"><Zap size={20} /></div>
+                </div>
+                <span className="metric-value">{rageClickData.excessiveScrolling}</span>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários com scroll excessivo na página</div>
+              </div>
+              <div className="glass-card metric-card">
+                <div className="metric-header">
+                  <span className="metric-title">Usuários (Clarity)</span>
+                  <div className="metric-icon icon-green"><Users size={20} /></div>
+                </div>
+                <span className="metric-value">{metrics.activeUsersClarity}</span>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Sessões registradas pelo Clarity</div>
+              </div>
+            </div>
+
+            {/* Link para o Clarity + explicação */}
+            <div className="glass-card" style={{ padding: '28px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <MonitorPlay size={24} color="#3b82f6" />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>Gravações de Sessão e Mapas de Calor</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Assista a gravações reais de usuários e visualize mapas de calor diretamente no painel do Clarity.</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
                 {[
-                  { icon: '🚫', title: 'Sem ad blockers', desc: 'Não é bloqueado por extensões de privacidade' },
-                  { icon: '🍪', title: 'Sem cookies', desc: 'Compliance com LGPD — sem consent banner' },
-                  { icon: '📈', title: 'Sem sampling', desc: '100% dos dados reais, sem amostragem' },
-                  { icon: '🔒', title: 'Self-hosted', desc: 'Seus dados no seu servidor' },
-                ].map((f, i) => (
-                  <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '12px', padding: '16px', border: '1px solid var(--surface-border)', textAlign: 'left' }}>
-                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>{f.icon}</div>
-                    <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{f.title}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{f.desc}</div>
+                  { icon: '🎥', title: 'Gravações de Sessão', desc: 'Assista à jornada real de cada usuário na sua página' },
+                  { icon: '🔥', title: 'Heatmaps de Clique', desc: 'Veja onde os usuários mais clicam na página' },
+                  { icon: '📜', title: 'Heatmaps de Scroll', desc: 'Identifique até onde os usuários chegam na página' },
+                  { icon: '⚡', title: 'Comportamento de UX', desc: 'Rage clicks, dead clicks e scroll excessivo' },
+                ].map((item, i) => (
+                  <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '10px', padding: '14px', border: '1px solid var(--surface-border)' }}>
+                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>{item.icon}</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{item.title}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+              {selectedProjeto?.clarity_project_id ? (
+                <a
+                  href={`https://clarity.microsoft.com/projects/view/${selectedProjeto.clarity_project_id}/heatmaps`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: 'var(--accent-color)', borderRadius: '10px', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '14px', transition: 'opacity 0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                >
+                  <MonitorPlay size={18} /> Abrir Clarity Dashboard →
+                </a>
+              ) : (
+                <div style={{ padding: '14px 18px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px', fontSize: '13px', color: '#f59e0b' }}>
+                  ⚠️ Clarity Project ID não configurado para este projeto. Configure no painel Admin → Projetos.
+                </div>
+              )}
+            </div>
+
+            {/* Resumo de insights de comportamento */}
+            <div className="glass-card" style={{ padding: '24px' }}>
+              <div className="card-title-row"><span className="card-title">💡 Insights de Comportamento</span></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+                {[
+                  rageClickData.rageClicks !== '—' && rageClickData.rageClicks > 0 && {
+                    color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)',
+                    icon: '⚠️', text: `${rageClickData.rageClicks} rage clicks detectados — usuários estão ficando frustrados com algo na página. Verifique botões com delays de resposta.`
+                  },
+                  rageClickData.deadClicks !== '—' && rageClickData.deadClicks > 0 && {
+                    color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',
+                    icon: '🎯', text: `${rageClickData.deadClicks} dead clicks — usuários clicam em elementos que não são clicáveis. Considere tornar esses elementos interativos ou melhorar clareza visual.`
+                  },
+                  { color: '#6366f1', bg: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.2)', icon: '📊', text: 'Use as gravações de sessão para identificar onde os usuários abandonam o formulário ou não encontram o botão de CTA.' },
+                  { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)', icon: '🔥', text: 'Combine os dados do mapa de calor de scroll com a taxa de conversão para saber se o CTA está visível para mais de 50% dos visitantes.' },
+                ].filter(Boolean).map((insight, i) => (
+                  <div key={i} style={{ padding: '14px 16px', background: insight.bg, border: `1px solid ${insight.border}`, borderRadius: '10px', fontSize: '13px', color: insight.color, lineHeight: '1.5' }}>
+                    {insight.icon} {insight.text}
                   </div>
                 ))}
               </div>
             </div>
           </div>
-        ) : !selectedUmamiWebsite ? (
-          <div className="dashboard">
-            <div className="glass-card" style={{ padding: '48px', textAlign: 'center' }}>
-              <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔗</div>
-              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '8px' }}>Projeto sem Umami vinculado</div>
-              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: '1.7' }}>
-                Este projeto ({selectedProjeto?.nome}) ainda não possui um <code style={{ background: 'var(--surface-bg)', padding: '2px 6px', borderRadius: '4px' }}>Umami Website ID</code> configurado.
-              </div>
-              <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', padding: '16px', borderRadius: '12px', display: 'inline-block', textAlign: 'left', maxWidth: '400px' }}>
-                <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 600 }}>Como resolver:</p>
-                <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  <li style={{ marginBottom: '6px' }}>Vá na aba <strong>Admin</strong></li>
-                  <li style={{ marginBottom: '6px' }}>Encontre este projeto e clique em editar (✏️)</li>
-                  <li>Cole o UUID do site que está no painel do Umami</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="dashboard">
-            {/* KPI Cards */}
-            <div className="metrics-grid">
-              {umamiLoading ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="glass-card metric-card" style={{ opacity: 0.4 }}>
-                  <div className="metric-header"><span className="metric-title">Carregando...</span></div>
-                  <span className="metric-value">—</span>
-                </div>
-              )) : umamiKpis ? (
-                <>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Visitantes Únicos</span><div className="metric-icon icon-blue"><Users size={20} /></div></div>
-                    <span className="metric-value">{umamiKpis.visitors?.toLocaleString('pt-BR')}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
-                      {parseFloat(umamiKpis.visitorsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
-                      <span style={{ color: parseFloat(umamiKpis.visitorsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitorsChange}%</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
-                    </div>
-                  </div>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Total de Sessões</span><div className="metric-icon icon-purple"><Activity size={20} /></div></div>
-                    <span className="metric-value">{umamiKpis.visits?.toLocaleString('pt-BR')}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
-                      {parseFloat(umamiKpis.visitsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
-                      <span style={{ color: parseFloat(umamiKpis.visitsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.visitsChange}%</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
-                    </div>
-                  </div>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Total de Leads</span><div className="metric-icon icon-green"><TrendingUp size={20} /></div></div>
-                    <span className="metric-value" style={{ color: '#10b981' }}>{umamiKpis.totalLeads?.toLocaleString('pt-BR')}</span>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Eventos com "lead" no nome</div>
-                  </div>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Taxa de Conversão</span><div className="metric-icon icon-orange"><Gauge size={20} /></div></div>
-                    <span className="metric-value" style={{ color: '#f59e0b' }}>{umamiKpis.convRate}</span>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Leads / Visitantes Únicos</div>
-                  </div>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Tempo Médio</span><div className="metric-icon icon-purple"><Clock size={20} /></div></div>
-                    <span className="metric-value">{umamiKpis.avgTime}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
-                      {parseFloat(umamiKpis.avgTimeChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
-                      <span style={{ color: parseFloat(umamiKpis.avgTimeChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.avgTimeChange}%</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
-                    </div>
-                  </div>
-                  <div className="glass-card metric-card">
-                    <div className="metric-header"><span className="metric-title">Pageviews</span><div className="metric-icon icon-blue"><BarChart3 size={20} /></div></div>
-                    <span className="metric-value">{umamiKpis.pageviews?.toLocaleString('pt-BR')}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
-                      {parseFloat(umamiKpis.pageviewsChange) >= 0 ? <ArrowUpRight size={14} color="#10b981" /> : <ArrowDownRight size={14} color="#ef4444" />}
-                      <span style={{ color: parseFloat(umamiKpis.pageviewsChange) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{umamiKpis.pageviewsChange}%</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>vs anterior</span>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            {/* Timeseries + Referrers */}
-            <div className="charts-grid">
-              <div className="glass-card">
-                <div className="card-title-row"><span className="card-title">Sessões vs Pageviews (Umami)</span></div>
-                <div style={{ height: '280px' }}>
-                  {Array.isArray(umamiTimeseries) && umamiTimeseries.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={umamiTimeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="gPVU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
-                          <linearGradient id="gSsU" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
-                        <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Area type="monotone" dataKey="pageviews" name="Pageviews" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#gPVU)" />
-                        <Area type="monotone" dataKey="sessions" name="Sessões" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gSsU)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
-                </div>
-              </div>
-              <div className="glass-card">
-                <div className="card-title-row"><span className="card-title">Canais de Origem (Referrers)</span></div>
-                <div style={{ height: '280px' }}>
-                  {umamiReferrers.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={umamiReferrers.slice(0, 8).map(r => ({ name: r.x || '(direct)', value: r.y }))} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                        <Bar dataKey="value" name="Sessões" radius={[0, 4, 4, 0]} barSize={18}>
-                          {umamiReferrers.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
-                </div>
-              </div>
-            </div>
-
-            {/* Distribuição Horária + Dispositivos */}
-            <div className="charts-grid">
-              <div className="glass-card">
-                <div className="card-title-row"><span className="card-title">Distribuição por Hora do Dia</span></div>
-                <div style={{ height: '260px' }}>
-                  {umamiHourly.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={umamiHourly} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
-                        <XAxis dataKey="hour" stroke="var(--text-secondary)" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={2} />
-                        <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                        <Bar dataKey="pageviews" name="Pageviews" radius={[3, 3, 0, 0]} barSize={13}>
-                          {umamiHourly.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados horários.</div>}
-                </div>
-              </div>
-              <div className="glass-card">
-                <div className="card-title-row"><span className="card-title">Sessões por Dispositivo</span></div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '8px 0' }}>
-                  {umamiDevices.length > 0 ? (() => {
-                    const total = umamiDevices.reduce((s, d) => s + (d.y || 0), 0);
-                    return umamiDevices.map((d, i) => {
-                      const pct = total > 0 ? ((d.y / total) * 100).toFixed(1) : 0;
-                      const DevIcon = d.x === 'mobile' ? Smartphone : d.x === 'desktop' ? Monitor : Tablet;
-                      const color = COLORS[i % COLORS.length];
-                      return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <DevIcon size={18} color={color} style={{ flexShrink: 0 }} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'capitalize' }}>{d.x}</span>
-                              <span style={{ fontSize: '13px', color }}>{d.y?.toLocaleString('pt-BR')} <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>({pct}%)</span></span>
-                            </div>
-                            <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })() : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados.</div>}
-                </div>
-              </div>
-            </div>
-
-            {/* Ranking de Páginas */}
-            <div className="glass-card" style={{ margin: 0 }}>
-              <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
-              <div style={{ overflowX: 'auto' }}>
-                {umamiTopUrls.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                        {['URL', 'PAGEVIEWS', 'CONVERSÕES'].map(h => <th key={h} style={{ textAlign: h === 'URL' ? 'left' : 'right', padding: '12px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>{h}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {umamiTopUrls.map((url, i) => {
-                        const leadsForUrl = umamiLeadEvents.filter(e => e.urlPath === url.x).length;
-                        const convUrl = url.y > 0 ? ((leadsForUrl / url.y) * 100).toFixed(1) + '%' : '—';
-                        return (
-                          <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                            <td style={{ padding: '10px 8px', fontSize: '12px', fontFamily: 'monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              <div style={{ marginBottom: '4px' }}>{url.x}</div>
-                              <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.12)' }}>
-                                <div style={{ height: '100%', width: `${((url.y / (umamiTopUrls[0]?.y || 1)) * 100).toFixed(0)}%`, background: '#6366f1', borderRadius: '2px' }} />
-                              </div>
-                            </td>
-                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '14px', fontWeight: 700 }}>{url.y?.toLocaleString('pt-BR')}</td>
-                            <td style={{ textAlign: 'right', padding: '10px 8px' }}>
-                              {leadsForUrl > 0 ? <span style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700 }}>{leadsForUrl} ({convUrl})</span>
-                                : <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Sem dados de páginas.</div>}
-              </div>
-            </div>
-
-            {/* Heatmap Semanal */}
-            {umamiWeekly && (
-              <div className="glass-card" style={{ margin: 0 }}>
-                <div className="card-title-row"><span className="card-title">Heatmap Semanal de Atividade</span></div>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Intensidade de sessões por hora e dia da semana</div>
-                <UmamiWeeklyHeatmap data={umamiWeekly} />
-              </div>
-            )}
-
-            {/* Países */}
-            {umamiCountries.length > 0 && (
-              <div className="glass-card" style={{ margin: 0 }}>
-                <div className="card-title-row"><span className="card-title">Usuários por País</span></div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {umamiCountries.slice(0, 10).map((c, i) => {
-                    const pct = umamiCountries[0]?.y > 0 ? ((c.y / umamiCountries[0].y) * 100).toFixed(0) : 0;
-                    return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontWeight: 600, fontSize: '13px', minWidth: '30px' }}>{c.x}</span>
-                        <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: COLORS[i % COLORS.length], borderRadius: '3px' }} />
-                        </div>
-                        <span style={{ fontSize: '13px', fontWeight: 700, minWidth: '50px', textAlign: 'right' }}>{c.y?.toLocaleString('pt-BR')}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>}
-
-      {/* ===== ABA: MAPAS DE CALOR (CLARITY) ===== */}
-      {activeNav === 'clarity' && <main className="main-content">
-        <header className="header">
-          <div className="header-title">
-            <h1>Mapas de Calor & Comportamento</h1>
-            <p>Dados de comportamento real via Microsoft Clarity</p>
-          </div>
-        </header>
-        <div className="dashboard">
-          {/* Métricas de comportamento do Clarity */}
-          <div className="metrics-grid">
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Rage Clicks</span>
-                <div className="metric-icon icon-orange"><MousePointer2 size={20} /></div>
-              </div>
-              <span className="metric-value">{rageClickData.rageClicks}</span>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários frustrados clicando repetidamente</div>
-            </div>
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Dead Clicks</span>
-                <div className="metric-icon icon-purple"><MousePointerClick size={20} /></div>
-              </div>
-              <span className="metric-value">{rageClickData.deadClicks}</span>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Cliques em elementos não interativos</div>
-            </div>
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Scroll Excessivo</span>
-                <div className="metric-icon icon-blue"><Zap size={20} /></div>
-              </div>
-              <span className="metric-value">{rageClickData.excessiveScrolling}</span>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Usuários com scroll excessivo na página</div>
-            </div>
-            <div className="glass-card metric-card">
-              <div className="metric-header">
-                <span className="metric-title">Usuários (Clarity)</span>
-                <div className="metric-icon icon-green"><Users size={20} /></div>
-              </div>
-              <span className="metric-value">{metrics.activeUsersClarity}</span>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Sessões registradas pelo Clarity</div>
-            </div>
-          </div>
-
-          {/* Link para o Clarity + explicação */}
-          <div className="glass-card" style={{ padding: '28px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <MonitorPlay size={24} color="#3b82f6" />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>Gravações de Sessão e Mapas de Calor</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Assista a gravações reais de usuários e visualize mapas de calor diretamente no painel do Clarity.</div>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-              {[
-                { icon: '🎥', title: 'Gravações de Sessão', desc: 'Assista à jornada real de cada usuário na sua página' },
-                { icon: '🔥', title: 'Heatmaps de Clique', desc: 'Veja onde os usuários mais clicam na página' },
-                { icon: '📜', title: 'Heatmaps de Scroll', desc: 'Identifique até onde os usuários chegam na página' },
-                { icon: '⚡', title: 'Comportamento de UX', desc: 'Rage clicks, dead clicks e scroll excessivo' },
-              ].map((item, i) => (
-                <div key={i} style={{ background: 'var(--surface-bg)', borderRadius: '10px', padding: '14px', border: '1px solid var(--surface-border)' }}>
-                  <div style={{ fontSize: '20px', marginBottom: '6px' }}>{item.icon}</div>
-                  <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{item.title}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.desc}</div>
-                </div>
-              ))}
-            </div>
-            {selectedProjeto?.clarity_project_id ? (
-              <a
-                href={`https://clarity.microsoft.com/projects/view/${selectedProjeto.clarity_project_id}/heatmaps`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: 'var(--accent-color)', borderRadius: '10px', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '14px', transition: 'opacity 0.2s' }}
-                onMouseOver={e => e.currentTarget.style.opacity = '0.85'}
-                onMouseOut={e => e.currentTarget.style.opacity = '1'}
-              >
-                <MonitorPlay size={18} /> Abrir Clarity Dashboard →
-              </a>
-            ) : (
-              <div style={{ padding: '14px 18px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px', fontSize: '13px', color: '#f59e0b' }}>
-                ⚠️ Clarity Project ID não configurado para este projeto. Configure no painel Admin → Projetos.
-              </div>
-            )}
-          </div>
-
-          {/* Resumo de insights de comportamento */}
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <div className="card-title-row"><span className="card-title">💡 Insights de Comportamento</span></div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-              {[
-                rageClickData.rageClicks !== '—' && rageClickData.rageClicks > 0 && {
-                  color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)',
-                  icon: '⚠️', text: `${rageClickData.rageClicks} rage clicks detectados — usuários estão ficando frustrados com algo na página. Verifique botões com delays de resposta.`
-                },
-                rageClickData.deadClicks !== '—' && rageClickData.deadClicks > 0 && {
-                  color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',
-                  icon: '🎯', text: `${rageClickData.deadClicks} dead clicks — usuários clicam em elementos que não são clicáveis. Considere tornar esses elementos interativos ou melhorar clareza visual.`
-                },
-                { color: '#6366f1', bg: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.2)', icon: '📊', text: 'Use as gravações de sessão para identificar onde os usuários abandonam o formulário ou não encontram o botão de CTA.' },
-                { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)', icon: '🔥', text: 'Combine os dados do mapa de calor de scroll com a taxa de conversão para saber se o CTA está visível para mais de 50% dos visitantes.' },
-              ].filter(Boolean).map((insight, i) => (
-                <div key={i} style={{ padding: '14px 16px', background: insight.bg, border: `1px solid ${insight.border}`, borderRadius: '10px', fontSize: '13px', color: insight.color, lineHeight: '1.5' }}>
-                  {insight.icon} {insight.text}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </main>}
+        </main>
+      }
     </>
   );
 }

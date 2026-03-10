@@ -10,7 +10,11 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, PieChart, Pie, LineChart, Line, FunnelChart, Funnel, LabelList
 } from 'recharts';
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
+import { scaleLinear } from "d3-scale";
 import { supabase, isSupabaseReady } from './lib/supabase';
+
+const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 const ADMIN_USER_ID = 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc';
@@ -1257,34 +1261,37 @@ function DashboardScreen({ user, onLogout }) {
 
             <div className="glass-card">
               <div className="card-title-row"><span className="card-title">Mapa de Usuários por País</span></div>
-              <div style={{ maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
-                {umamiCountries && umamiCountries.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--surface-border)', position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1 }}>
-                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>PAÍS</th>
-                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>SESSÕES</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {umamiCountries.map((c, i) => {
-                        const maxUsers = umamiCountries[0]?.y || 1;
-                        const pct = ((c.y / maxUsers) * 100).toFixed(0);
-                        return (
-                          <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                            <td style={{ padding: '10px 8px', fontSize: '13px', fontWeight: 500 }}>
-                              {c.x}
-                              <div style={{ marginTop: '4px', height: '3px', borderRadius: '2px', background: 'rgba(59, 130, 246, 0.15)', width: '100%' }}>
-                                <div style={{ height: '100%', borderRadius: '2px', background: '#3b82f6', width: `${pct}%`, transition: 'width 0.5s ease' }}></div>
-                              </div>
-                            </td>
-                            <td style={{ textAlign: 'right', padding: '10px 8px', fontSize: '13px', fontWeight: 600 }}>{c.y.toLocaleString('pt-BR')}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Sem dados de países.</div>}
+              <div style={{ height: '300px', width: '100%', overflow: 'hidden', padding: '10px 0' }}>
+                {umamiCountries && umamiCountries.length > 0 ? (() => {
+                  const maxUsers = Math.max(...umamiCountries.map(c => c.y), 1);
+                  const colorScale = scaleLinear().domain([0, maxUsers]).range(["rgba(59, 130, 246, 0.15)", "#3b82f6"]);
+
+                  return (
+                    <ComposableMap projectionConfig={{ scale: 140 }} style={{ width: '100%', height: '100%' }}>
+                      <Geographies geography={geoUrl}>
+                        {({ geographies }) =>
+                          geographies.map((geo) => {
+                            const d = umamiCountries.find(s => s.x === geo.properties.iso_a2 || s.x === geo.properties.iso_a3);
+                            return (
+                              <Geography
+                                key={geo.rsmKey}
+                                geography={geo}
+                                fill={d ? colorScale(d.y) : "rgba(255,255,255,0.03)"}
+                                stroke="var(--surface-border)"
+                                strokeWidth={0.5}
+                                style={{
+                                  default: { outline: "none" },
+                                  hover: { fill: "#10b981", outline: "none" },
+                                  pressed: { outline: "none" }
+                                }}
+                              />
+                            );
+                          })
+                        }
+                      </Geographies>
+                    </ComposableMap>
+                  );
+                })() : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Sem dados de países.</div>}
               </div>
             </div>
           </div>

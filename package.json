@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
+    "d3-scale": "^4.0.2",
     "lucide-react": "^0.577.0",
+    "prop-types": "^15.8.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-simple-maps": "^3.0.0",
     "recharts": "^3.7.0"
   },
   "devDependencies": {

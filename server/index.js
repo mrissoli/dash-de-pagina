@@ -1575,7 +1575,7 @@ app.get('/api/umami/event-data', async (req, res) => {
 // Dados consolidados para o dashboard Umami (uma requisição, múltiplos dados)
 app.get('/api/umami/dashboard', async (req, res) => {
     try {
-        const { websiteId, dateRange = '7daysAgo', endDate } = req.query;
+        const { websiteId, dateRange = '7daysAgo', endDate, eventName = 'lead' } = req.query;
         if (!websiteId) return res.json({ success: false, error: 'Falta websiteId' });
         const { startAt, endAt } = getUmamiDateRange(dateRange, endDate);
         const duration = endAt - startAt;
@@ -1610,7 +1610,9 @@ app.get('/api/umami/dashboard', async (req, res) => {
             const evData = events.value;
             allEvents = evData?.data || evData || (Array.isArray(evData) ? evData : []);
         }
-        const leadEvents = allEvents.filter(e => e.eventName && e.eventName.toLowerCase().includes('lead'));
+        
+        const availableEvents = [...new Set(allEvents.map(e => e.eventName))].filter(Boolean);
+        const leadEvents = allEvents.filter(e => e.eventName && e.eventName.toLowerCase().includes(eventName.toLowerCase()));
         const totalLeads = leadEvents.length;
         const leadsChange = '0'; // prev leva tempo, simplificamos aqui
         const visitors = cur.visitors || 0;
@@ -1715,6 +1717,7 @@ app.get('/api/umami/dashboard', async (req, res) => {
             countries: countriesData,
             utmData: utmData,
             leadEvents: leadEvents.slice(0, 50), // Send some leads for feed/properties
+            availableEvents: availableEvents,
         });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

@@ -590,6 +590,8 @@ function DashboardScreen({ user, onLogout }) {
   const [umamiUtmData, setUmamiUtmData] = useState([]);
   const [umamiBrowsers, setUmamiBrowsers] = useState([]);
   const [showUmamiWebsiteMenu, setShowUmamiWebsiteMenu] = useState(false);
+  const [selectedUmamiEvent, setSelectedUmamiEvent] = useState('lead');
+  const [availableUmamiEvents, setAvailableUmamiEvents] = useState([]);
 
   const thisYear = new Date().getFullYear();
   const dateOptions = [
@@ -772,7 +774,7 @@ function DashboardScreen({ user, onLogout }) {
       setUmamiLoading(true);
       try {
         const { startDate, endDate } = selectedDateOption;
-        const qs = `websiteId=${selectedUmamiWebsite.id}&dateRange=${startDate}&endDate=${endDate}`;
+        const qs = `websiteId=${selectedUmamiWebsite.id}&dateRange=${startDate}&endDate=${endDate}&eventName=${encodeURIComponent(selectedUmamiEvent)}`;
         const [dashRes] = await Promise.all([
           fetch(`${API_BASE}/umami/dashboard?${qs}`)
         ]);
@@ -798,6 +800,7 @@ function DashboardScreen({ user, onLogout }) {
             setUmamiLeadEvents(d.leadEvents || []);
             setUmamiUtmData(d.utmData || []);
             setUmamiBrowsers(d.browsers || []);
+            setAvailableUmamiEvents(d.availableEvents || []);
 
             // Hourly Parsing
             const hourMap = {};
@@ -818,7 +821,12 @@ function DashboardScreen({ user, onLogout }) {
       finally { setUmamiLoading(false); }
     };
     fetchUmami();
-  }, [selectedUmamiWebsite, dateRange]);
+    
+    // Configura o fetch periódico para não floodar
+    const interval = setInterval(fetchUmami, 60000); // 1 minuto
+    
+    return () => clearInterval(interval);
+  }, [selectedUmamiWebsite, dateRange, selectedUmamiEvent]);
 
   // PageSpeed — carrega quando o projeto muda (URL separada)
   useEffect(() => {
@@ -1157,13 +1165,26 @@ function DashboardScreen({ user, onLogout }) {
           </div>
           {/* ===== Conversão UTM / Campanha ===== */}
           <div className="glass-card" style={{ margin: '0' }}>
-            <div className="card-title-row"><span className="card-title">Conversão por UTM / Campanha</span></div>
+            <div className="card-title-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <span className="card-title">Conversão por UTM / Campanha</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Evento:</span>
+                <select 
+                  value={selectedUmamiEvent}
+                  onChange={e => setSelectedUmamiEvent(e.target.value)}
+                  style={{ background: 'var(--surface-bg)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', outline: 'none' }}
+                >
+                  <option value="lead">Lead</option>
+                  {(availableUmamiEvents || []).filter(ev => ev.toLowerCase() !== 'lead').map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                </select>
+              </div>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               {umamiUtmData && umamiUtmData.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                      {['FONTE', 'CAMPANHA', 'SESSÕES', 'LEADS', 'TAXA CONV.'].map(h => (
+                      {['FONTE', 'CAMPANHA', 'SESSÕES', selectedUmamiEvent.toUpperCase().substring(0, 15), 'TAXA CONV.'].map(h => (
                         <th key={h} style={{ textAlign: h === 'FONTE' || h === 'CAMPANHA' ? 'left' : 'right', padding: '12px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>{h}</th>
                       ))}
                     </tr>
@@ -1298,7 +1319,20 @@ function DashboardScreen({ user, onLogout }) {
 
           {/* ===== Ranking de Páginas ===== */}
           <div className="glass-card" style={{ margin: '0' }}>
-            <div className="card-title-row"><span className="card-title">Ranking de Páginas</span></div>
+            <div className="card-title-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <span className="card-title">Ranking de Páginas</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Evento:</span>
+                <select 
+                  value={selectedUmamiEvent}
+                  onChange={e => setSelectedUmamiEvent(e.target.value)}
+                  style={{ background: 'var(--surface-bg)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', outline: 'none' }}
+                >
+                  <option value="lead">Lead</option>
+                  {(availableUmamiEvents || []).filter(ev => ev.toLowerCase() !== 'lead').map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                </select>
+              </div>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               {umamiTopUrls && umamiTopUrls.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1307,7 +1341,7 @@ function DashboardScreen({ user, onLogout }) {
                       <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>#</th>
                       <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>PÁGINA</th>
                       <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>VISUALIZAÇÕES</th>
-                      <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>LEADS</th>
+                      <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{selectedUmamiEvent.toUpperCase().substring(0, 15)}</th>
                       <th style={{ textAlign: 'right', padding: '12px 8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>CONVERSÃO</th>
                     </tr>
                   </thead>

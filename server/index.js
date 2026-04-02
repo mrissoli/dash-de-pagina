@@ -166,7 +166,9 @@ app.post('/api/login', async (req, res) => {
             .eq('user_id', authData.user.id)
             .single();
 
-        if (dbError || !clientData) {
+        const isAdmin = authData.user.id === 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc' || authData.user.user_metadata?.role === 'admin';
+
+        if ((dbError || !clientData) && !isAdmin) {
             return res.status(404).json({ error: 'Dashboard não configurado para esta conta.' });
         }
 
@@ -174,9 +176,10 @@ app.post('/api/login', async (req, res) => {
         const payload = {
             id: authData.user.id,
             email: authData.user.email,
-            nome: clientData.nome,
-            ga4PropertyId: clientData.google_property_id,
-            clarityProjectId: clientData.clarity_project_id
+            nome: clientData?.nome || authData.user.user_metadata?.nome || 'Admin',
+            ga4PropertyId: clientData?.google_property_id || null,
+            clarityProjectId: clientData?.clarity_project_id || null,
+            isAdmin: isAdmin
         };
 
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
@@ -250,15 +253,70 @@ const requireAdmin = async (req, res, next) => {
         if (error || !user) {
             return res.status(401).json({ error: 'Token inválido ou expirado.' });
         }
-        if (user.id !== ADMIN_USER_ID) {
+        if (user.id !== ADMIN_USER_ID && user.user_metadata?.role !== 'admin') {
             return res.status(403).json({ error: 'Acesso restrito ao administrador.' });
         }
-        req.user = { id: user.id, email: user.email };
+        req.user = { id: user.id, email: user.email, isAdmin: true };
         next();
     } catch (err) {
         res.status(401).json({ error: 'Erro ao validar token.' });
     }
 };
+
+// ============================================
+// ADMIN: Listar Administradores
+// ============================================
+app.get('/api/admin/admins', requireAdmin, async (req, res) => {
+    try {
+        const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers();
+        if (error) throw error;
+        // Filtra administradores
+        const admins = users.filter(u => u.id === ADMIN_USER_ID || u.user_metadata?.role === 'admin').map(u => ({
+            user_id: u.id,
+            nome: u.user_metadata?.nome || 'Administrador',
+            email: u.email
+        }));
+        res.json({ success: true, data: admins });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Criar Administrador
+// ============================================
+app.post('/api/admin/admins', requireAdmin, async (req, res) => {
+    try {
+        const { nome, email, senha } = req.body;
+        if (!nome || !email || !senha) return res.status(400).json({ success: false, error: 'Campos obrigatórios' });
+        
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+            email, password: senha, email_confirm: true,
+            user_metadata: { nome, role: 'admin' }
+        });
+        if (error) throw error;
+        res.json({ success: true, user_id: data.user.id, nome, email });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// ADMIN: Deletar Administrador
+// ============================================
+app.delete('/api/admin/admins/:userId', requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        if (userId === ADMIN_USER_ID) {
+            return res.status(403).json({ success: false, error: 'Não é possível deletar o administrador principal.' });
+        }
+        const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // ============================================
 // ADMIN: Listar todos os clientes

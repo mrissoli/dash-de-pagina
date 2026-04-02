@@ -246,9 +246,10 @@ function LoginScreen({ onLogin }) {
 // Admin Panel Component
 // ============================================================
 function AdminPanel({ user }) {
-  const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' | 'projetos'
+  const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' | 'projetos' | 'admins'
   const [clientes, setClientes] = useState([]);
   const [projetos, setProjetos] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [selectedCliente, setSelectedCliente] = useState(null);
 
   // Estado do formulário de cliente
@@ -262,6 +263,10 @@ function AdminPanel({ user }) {
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ text: '', type: '' });
+
+  // Estado do formulário de admin
+  const [showAdminForm, setShowAdminForm] = useState(false);
+  const [adminForm, setAdminForm] = useState({ nome: '', email: '', senha: '' });
 
   const showMsg = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg({ text: '', type: '' }), 4000); };
 
@@ -291,7 +296,14 @@ function AdminPanel({ user }) {
     if (d.success) setProjetos(d.data);
   }, [adminFetch]);
 
-  useEffect(() => { loadClientes(); loadProjetos(null); }, []);
+  const loadAdmins = useCallback(async () => {
+    const res = await adminFetch(`${API_BASE}/admin/admins`);
+    const d = await res.json();
+    if (d.success) setAdmins(d.data);
+    else showMsg(d.error || 'Erro ao carregar administradores', 'error');
+  }, [adminFetch]);
+
+  useEffect(() => { loadClientes(); loadProjetos(null); loadAdmins(); }, []);
 
   const handleSelectCliente = (c) => {
     setSelectedCliente(c);
@@ -321,6 +333,29 @@ function AdminPanel({ user }) {
     const res = await adminFetch(`${API_BASE}/admin/clientes/${c.user_id}`, { method: 'DELETE' });
     const d = await res.json();
     if (d.success) { showMsg('✅ Cliente excluído.'); loadClientes(); if (selectedCliente?.user_id === c.user_id) setSelectedCliente(null); }
+    else showMsg(d.error, 'error');
+  };
+
+  // ---- CRUD Admins ----
+  const handleCreateAdmin = async () => {
+    if (!adminForm.nome || !adminForm.email || !adminForm.senha) return showMsg('Preencha nome, e-mail e senha.', 'error');
+    setSaving(true);
+    const res = await adminFetch(`${API_BASE}/admin/admins`, { method: 'POST', body: JSON.stringify(adminForm) });
+    const d = await res.json();
+    if (d.success) {
+      showMsg(`✅ Administrador "${d.nome}" criado com sucesso!`);
+      setShowAdminForm(false);
+      setAdminForm({ nome: '', email: '', senha: '' });
+      loadAdmins();
+    } else { showMsg(d.error, 'error'); }
+    setSaving(false);
+  };
+
+  const handleDeleteAdmin = async (a) => {
+    if (!window.confirm(`Excluir o administrador "${a.nome}"?`)) return;
+    const res = await adminFetch(`${API_BASE}/admin/admins/${a.user_id}`, { method: 'DELETE' });
+    const d = await res.json();
+    if (d.success) { showMsg('✅ Administrador excluído.'); loadAdmins(); }
     else showMsg(d.error, 'error');
   };
 
@@ -375,7 +410,7 @@ function AdminPanel({ user }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', background: 'var(--surface-bg)', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid var(--surface-border)' }}>
-        {[{ key: 'clientes', label: '👥 Clientes', count: clientes.length }, { key: 'projetos', label: '📁 Projetos', count: projetos.length }].map(tab => (
+        {[{ key: 'clientes', label: '👥 Clientes', count: clientes.length }, { key: 'projetos', label: '📁 Projetos', count: projetos.length }, { key: 'admins', label: '🛡️ Admins', count: admins.length }].map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '13px', background: activeTab === tab.key ? 'var(--card-bg)' : 'transparent', color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-secondary)', boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.3)' : 'none', transition: 'all 0.15s' }}>
             {tab.label} <span style={{ marginLeft: '6px', background: activeTab === tab.key ? 'var(--accent-color)' : 'var(--surface-border)', color: '#fff', fontSize: '11px', padding: '1px 7px', borderRadius: '20px' }}>{tab.count}</span>
@@ -447,6 +482,60 @@ function AdminPanel({ user }) {
                 <div style={{ fontSize: '13px' }}>Clique em "Novo Cliente" para adicionar o primeiro.</div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== ABA ADMINS ===== */}
+      {activeTab === 'admins' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ fontWeight: '700', fontSize: '15px' }}>Administradores do Sistema</div>
+            <button onClick={() => setShowAdminForm(!showAdminForm)} style={btnSt('var(--accent-color)')}><Plus size={14} /> Novo Administrador</button>
+          </div>
+
+          {showAdminForm && (
+            <div style={{ ...adSt, marginBottom: '16px', border: '1px solid var(--accent-color)' }}>
+              <div style={{ fontWeight: '700', marginBottom: '16px', fontSize: '15px' }}>➕ Criar novo administrador</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={labelSt}>Nome completo *</label>
+                  <input style={inputSt} placeholder="Ex: João Admin" value={adminForm.nome} onChange={e => setAdminForm({ ...adminForm, nome: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelSt}>E-mail *</label>
+                  <input style={inputSt} type="email" placeholder="admin@empresa.com" value={adminForm.email} onChange={e => setAdminForm({ ...adminForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelSt}>Senha de acesso *</label>
+                  <input style={inputSt} type="password" placeholder="Mínimo 6 caracteres" value={adminForm.senha} onChange={e => setAdminForm({ ...adminForm, senha: e.target.value })} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button onClick={handleCreateAdmin} disabled={saving} style={btnSt('#10b981')}><Check size={14} />{saving ? 'Criando...' : 'Criar Admin'}</button>
+                <button onClick={() => { setShowAdminForm(false); setAdminForm({ nome: '', email: '', senha: '' }); }} style={{ ...btnSt('transparent'), border: '1px solid var(--surface-border)', color: 'var(--text-secondary)' }}><X size={14} /> Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {admins.map(a => (
+              <div key={a.user_id} style={{ ...adSt, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(239,68,68,0.3), rgba(245,158,11,0.2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: '700', fontSize: '16px', color: 'var(--danger-color)' }}>
+                  {a.nome?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-primary)' }}>{a.nome || 'Sem nome'} <span style={{fontSize: '11px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-color)', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: 'bold'}}>ADMIN</span></div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{a.email}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted, #555)', marginTop: '2px', fontFamily: 'monospace' }}>{a.user_id}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  {a.user_id !== 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc' && (
+                    <button onClick={() => handleDeleteAdmin(a)} style={{ ...btnSt('rgba(239,68,68,0.1)'), color: 'var(--danger-color)', border: '1px solid rgba(239,68,68,0.3)' }}><Trash2 size={13} /></button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

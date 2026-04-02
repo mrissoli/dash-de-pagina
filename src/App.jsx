@@ -648,6 +648,11 @@ function DashboardScreen({ user, onLogout }) {
   const [selectedProjeto, setSelectedProjeto] = useState(null);
   const [showProjetoMenu, setShowProjetoMenu] = useState(false);
 
+  // Admin Client Seletor
+  const [clientesAdmin, setClientesAdmin] = useState([]);
+  const [selectedClienteAdminId, setSelectedClienteAdminId] = useState(null);
+  const [showClienteAdminMenu, setShowClienteAdminMenu] = useState(false);
+
   // Filtro de página
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState(null); // null = todas as páginas
@@ -725,6 +730,14 @@ function DashboardScreen({ user, onLogout }) {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.access_token) {
             options.headers = { 'Authorization': `Bearer ${session.access_token}` };
+            
+            // Tenta puxar lista de clientes também
+            fetch(`${API_BASE}/admin/clientes`, options)
+              .then(res => res.json())
+              .then(d => {
+                if (d.success) setClientesAdmin(d.data);
+              })
+              .catch(() => {});
           }
         }
         
@@ -1013,15 +1026,46 @@ function DashboardScreen({ user, onLogout }) {
             <p>Dados combinados de forma segura pelo Servidor</p>
           </div>
           <div className="header-actions">
+            {/* Seletor de Cliente (Só Admin) */}
+            {isAdmin && clientesAdmin.length > 0 && (
+              <div className="date-picker" onClick={() => setShowClienteAdminMenu(!showClienteAdminMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px' }}>
+                <Users size={16} color="var(--text-secondary)" />
+                <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedClienteAdminId ? clientesAdmin.find(c => c.user_id === selectedClienteAdminId)?.nome : 'Todos os Clientes'}
+                </span>
+                {selectedClienteAdminId && (
+                  <span onClick={(e) => { e.stopPropagation(); setSelectedClienteAdminId(null); setShowClienteAdminMenu(false); }} style={{ marginLeft: '4px', display: 'flex' }}>
+                    <X size={13} color="var(--text-secondary)" />
+                  </span>
+                )}
+                <ChevronDown size={16} color="var(--text-secondary)" />
+                {showClienteAdminMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#1e1e24', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'dropdownFadeIn 0.2s ease-out' }}>
+                    <div onClick={(e) => { e.stopPropagation(); setSelectedClienteAdminId(null); setShowClienteAdminMenu(false); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: !selectedClienteAdminId ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: !selectedClienteAdminId ? '600' : '400', background: !selectedClienteAdminId ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'all 0.15s' }}>
+                        Todos os Clientes
+                    </div>
+                    {clientesAdmin.map(c => (
+                      <div key={c.user_id} onClick={(e) => { e.stopPropagation(); setSelectedClienteAdminId(c.user_id); setShowClienteAdminMenu(false); setSelectedProjeto(null); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: selectedClienteAdminId === c.user_id ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: selectedClienteAdminId === c.user_id ? '600' : '400', background: selectedClienteAdminId === c.user_id ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'all 0.15s' }}>
+                        {c.nome}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Seletor de Projeto */}
-            {projetos.length > 1 && (
+            {(isAdmin ? projetos.filter(p => !selectedClienteAdminId || p.cliente_id === selectedClienteAdminId) : projetos).length > 0 && (
               <div className="date-picker" onClick={() => setShowProjetoMenu(!showProjetoMenu)} style={{ cursor: 'pointer', position: 'relative', userSelect: 'none', marginRight: '8px' }}>
                 <FolderOpen size={16} color="var(--text-secondary)" />
-                <span>{selectedProjeto?.nome || 'Projeto'}</span>
+                <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedProjeto?.nome || 'Nenhum Projeto'}
+                </span>
                 <ChevronDown size={16} color="var(--text-secondary)" />
                 {showProjetoMenu && (
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '220px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-                    {projetos.map(p => (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#1e1e24', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'dropdownFadeIn 0.2s ease-out' }}>
+                    {(isAdmin ? projetos.filter(p => !selectedClienteAdminId || p.cliente_id === selectedClienteAdminId) : projetos).map(p => (
                       <div key={p.id} onClick={(e) => { e.stopPropagation(); setSelectedProjeto(p); setShowProjetoMenu(false); }}
                         style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: selectedProjeto?.id === p.id ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: selectedProjeto?.id === p.id ? '600' : '400', background: selectedProjeto?.id === p.id ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'all 0.15s' }}>
                         {p.nome}
@@ -1045,7 +1089,7 @@ function DashboardScreen({ user, onLogout }) {
               )}
               <ChevronDown size={16} color="var(--text-secondary)" />
               {showPageMenu && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '8px', zIndex: 200, width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#1e1e24', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '8px', zIndex: 200, width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'dropdownFadeIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
                   <input
                     autoFocus
                     placeholder="Buscar /slug..."
@@ -1081,7 +1125,7 @@ function DashboardScreen({ user, onLogout }) {
               <span>{selectedDateOption?.label}</span>
               <ChevronDown size={16} color="var(--text-secondary)" />
               {showDateMenu && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#1e1e24', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'dropdownFadeIn 0.2s ease-out' }}>
                   {dateOptions.map(opt => (
                     <div key={opt.value} onClick={(e) => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
                       style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? '600' : '400', background: dateRange === opt.value ? 'rgba(99, 102, 241, 0.1)' : 'transparent', transition: 'all 0.15s' }}>
@@ -1516,7 +1560,7 @@ function DashboardScreen({ user, onLogout }) {
                 <span>{selectedDateOption?.label}</span>
                 <ChevronDown size={16} color="var(--text-secondary)" />
                 {showDateMenu && (
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#1e1e24', border: '1px solid var(--surface-border)', borderRadius: '10px', padding: '6px', zIndex: 100, minWidth: '200px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'dropdownFadeIn 0.2s ease-out' }}>
                     {dateOptions.map(opt => (
                       <div key={opt.value} onClick={e => { e.stopPropagation(); setDateRange(opt.value); setShowDateMenu(false); }}
                         style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: dateRange === opt.value ? 'var(--accent-color)' : 'var(--text-primary)', fontWeight: dateRange === opt.value ? 700 : 400, background: dateRange === opt.value ? 'rgba(99,102,241,0.1)' : 'transparent' }}>

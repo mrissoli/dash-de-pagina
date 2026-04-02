@@ -638,7 +638,7 @@ function AdminPanel({ user }) {
 // Dashboard Screen
 // ============================================================
 function DashboardScreen({ user, onLogout }) {
-  const isAdmin = user.id === ADMIN_USER_ID;
+  const isAdmin = user.id === ADMIN_USER_ID || user.isAdmin;
   const [activeNav, setActiveNav] = useState('dashboard');
   const [dateRange, setDateRange] = useState('7daysAgo');
   const [showDateMenu, setShowDateMenu] = useState(false);
@@ -713,11 +713,22 @@ function DashboardScreen({ user, onLogout }) {
   ];
   const selectedDateOption = dateOptions.find(o => o.value === dateRange) || dateOptions[3];
 
-  // Carrega lista de projetos do cliente
+  // Carrega lista de projetos do cliente (ou todos para admins)
   useEffect(() => {
     const loadProjetos = async () => {
       try {
-        const res = await fetch(`${API_BASE}/meus-projetos`, { credentials: 'include' });
+        let url = `${API_BASE}/meus-projetos`;
+        let options = { credentials: 'include' };
+        
+        if (isAdmin) {
+          url = `${API_BASE}/admin/projetos`;
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            options.headers = { 'Authorization': `Bearer ${session.access_token}` };
+          }
+        }
+        
+        const res = await fetch(url, options);
         const d = await res.json();
         if (d.success && d.data.length > 0) {
           setProjetos(d.data);
@@ -978,7 +989,7 @@ function DashboardScreen({ user, onLogout }) {
           {isAdmin && (
             <>
               <div className="nav-section-title" style={{ marginTop: '16px' }}>Administração</div>
-              <div className={`nav-item ${activeNav === 'admin' ? 'active' : ''}`} onClick={() => setActiveNav('admin')} style={{ color: 'var(--accent-color)' }}><ShieldCheck size={18} /> Gerenciar Clientes</div>
+              <div className={`nav-item ${activeNav === 'admin' ? 'active' : ''}`} onClick={() => setActiveNav('admin')} style={{ color: 'var(--accent-color)' }}><ShieldCheck size={18} /> Administração Geral</div>
             </>
           )}
         </div>

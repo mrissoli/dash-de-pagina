@@ -178,24 +178,42 @@ function LoginScreen({ onLogin }) {
       }
 
       // Buscar perfil na tabela do cliente
-      const { data: clientData, error: dbError } = await supabase
-        .from('clientes_dashboard')
-        .select('nome, google_property_id, clarity_project_id, clarity_token')
-        .eq('user_id', authData.user.id)
-        .single();
+      let clientData = null;
+      let dbError = null;
+
+      const isAdmin = authData.user.id === 'c0a20ec2-cabc-4fd3-9e69-adf77bc19ecc' || authData.user.user_metadata?.role === 'admin';
+
+      if (!isAdmin) {
+        const { data, error } = await supabase
+          .from('clientes_dashboard')
+          .select('nome, google_property_id, clarity_project_id, clarity_token')
+          .eq('user_id', authData.user.id)
+          .single();
+        clientData = data;
+        dbError = error;
+      } else {
+        // Se for admin, assume dados padrão para avançar
+        clientData = {
+          nome: authData.user.user_metadata?.nome || 'Admin',
+          google_property_id: null,
+          clarity_project_id: null,
+          clarity_token: null
+        };
+      }
 
       setIsLoading(false);
 
-      if (dbError || !clientData) {
+      if ((dbError || !clientData) && !isAdmin) {
         setErrorMsg('Dashboard não configurado para esta conta nesta base.');
       } else {
         onLogin({
           id: authData.user.id,
           email: authData.user.email,
-          nome: clientData.nome,
-          ga4PropertyId: clientData.google_property_id,
-          clarityProjectId: clientData.clarity_project_id,
-          clarityToken: clientData.clarity_token
+          nome: clientData?.nome || 'Admin',
+          ga4PropertyId: clientData?.google_property_id || null,
+          clarityProjectId: clientData?.clarity_project_id || null,
+          clarityToken: clientData?.clarity_token || null,
+          isAdmin: isAdmin
         });
       }
     } catch (err) {
